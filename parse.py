@@ -1,4 +1,4 @@
-from typing import Union, Tuple, Optional
+from typing import Union, Tuple, Optional, List, Callable
 from dataclasses import dataclass
 
 @dataclass
@@ -8,6 +8,29 @@ class Block:
 @dataclass
 class Expression(Block):
     pass
+
+
+@dataclass
+class TextRange:
+    start: int
+    end: int
+
+    def __post_init__(self):
+        assert isinstance(self.start, int), f"`start` must be an int, got {type(self.start)=}"
+        assert isinstance(self.end, int), f"`end` must be an int, got {type(self.end)=}"
+        assert self.start < self.end, f"`end` must be greater than `start`, got {self.start=}, {self.end=}"
+
+    @property
+    def slice(self) -> Tuple[int, int]:
+        return slice(self.start, self.end+1)
+    
+    @property
+    def __len__(self) -> int:
+        return self.end - self.start + 1
+    
+    @property
+    def size(self) -> int:
+        return len(self)
 
 @dataclass
 class StringLiteral(Expression):
@@ -81,6 +104,17 @@ class Parsable:
                 raise ve
         
 
+def ensure_parsable(func: Callable) -> Callable:
+    def wrapper(s: Union[str, Parsable], *args, **kwargs) -> Any:
+        # Check if 's' is a string and convert it to 'Parsable' if necessary
+        if isinstance(s, str):
+            s = Parsable(s)
+        elif not isinstance(s, Parsable):
+            raise TypeError(f"Argument 's' must be of type 'str' or 'Parsable', got {type(s)=}")
+        # Call the original function with the new 's' and other arguments
+        return func(s, *args, **kwargs)
+    return wrapper
+
 def index_to_row_and_column(s: Union[Parsable, str], index: int) -> Tuple[int, int]:
     """given a str, will return the row/column representation of the index"""
     if isinstance(s, str):
@@ -129,7 +163,7 @@ def find_enclosing_quote(s: Union[Parsable, str], left_quote: str, offset: int=0
     search_offest = offset + len(left_quote)
     return s.index(right_quote, offset=search_offest)
 
-def find_string_literal(s: Union[Parsable, str], offset: int=0) -> Optional[Tuple[Tuple[int, int], StringLiteral]]:
+def find_string_literal(s: Union[Parsable, str], offset: int=0) -> Optional[Tuple[TextRange, StringLiteral]]:
     """searches for the first instance from the left of a string literal, returns None if not found"""
     
     # used when no enclosing quote is found to print this 
@@ -153,5 +187,14 @@ def find_string_literal(s: Union[Parsable, str], offset: int=0) -> Optional[Tupl
             literal_start_index = offset + left_index + len(left_quote)
             literal_end_index = literal_start_index + optional_right
             literal = s[literal_start_index:(literal_end_index)]
-            return ((start_index, end_index), StringLiteral((left_quote, QUOTES_DICT[left_quote]), literal))
+            return (
+                TextRange(start_index, end_index), 
+                StringLiteral((left_quote, QUOTES_DICT[left_quote]), literal)
+                )
 
+def parse_literals(s: Union[Parsable, str], offset=0) -> List[Tuple[TextRange, StringLiteral]]:
+    """parses the entire string s and returns a list of Tuple[TextRange, StringLiteral]
+    the list will be empty if none are found"""
+    if isinstance(s, str):
+        s = Parsable(s)
+    pass

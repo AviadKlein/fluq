@@ -4,6 +4,30 @@ from parse import *
 
 class TestParsing(TestCase):
 
+    def test_text_range_init(self):
+        tr = TextRange(0, 1)
+
+        with self.assertRaises(AssertionError) as cm:
+            TextRange(0.1, 1)
+        self.assertTrue("`start` must be an int, got type(self.start)=<class 'float'>" in str(cm.exception))
+
+        with self.assertRaises(AssertionError) as cm:
+            TextRange(0, 1.2)
+        self.assertTrue("`end` must be an int, got type(self.end)=<class 'float'>" in str(cm.exception))
+
+        with self.assertRaises(AssertionError) as cm:
+            TextRange(0, 0)
+        self.assertTrue("`end` must be greater than `start`, got self.start=0, self.end=0" in str(cm.exception))
+
+    def test_text_range_slice(self):
+        tr = TextRange(3,5)
+        self.assertEqual('abcdefg'[tr.slice], 'def')
+
+        tr = TextRange(1,2)
+        self.assertEqual('abcdefg'[tr.slice], 'bc')
+
+
+
     def test_parsable_len(self):
         s = "the quick brown fox"
         result = Parsable(s)
@@ -129,26 +153,26 @@ class TestParsing(TestCase):
             
     def test_find_string_literal(self):
         s = Parsable("select * from gg where index='done' and date >= '2023-01-01' ")
-        ((start, end), literal) = find_string_literal(s)
-        self.assertEqual(start, 29)
-        self.assertEqual(end, 34)
+        (trange, literal) = find_string_literal(s)
+        self.assertEqual(trange.start, 29)
+        self.assertEqual(trange.end, 34)
         self.assertEqual(literal.value, "done")
         self.assertEqual(literal.quotes, ("'", "'"))
-        self.assertEqual(s[start:(end+1)], "'done'")
+        self.assertEqual(s[trange.slice], "'done'")
 
         s = Parsable("""select * from gg where index='do"ne' and date >= '2023-01-01' """)
-        ((start, end), literal) = find_string_literal(s)
-        self.assertEqual(start, 29)
-        self.assertEqual(end, 35)
+        (trange, literal) = find_string_literal(s)
+        self.assertEqual(trange.start, 29)
+        self.assertEqual(trange.end, 35)
         self.assertEqual(literal.value, 'do"ne')
         self.assertEqual(literal.quotes, ("'", "'"))
-        self.assertEqual(s[start:(end+1)], """'do"ne'""")
+        self.assertEqual(s[trange.slice], """'do"ne'""")
 
 
         s = Parsable("""select * from gg where index='' and date >= '2023-01-01' """)
-        ((start, end), literal) = find_string_literal(s)
-        self.assertEqual(start, 29)
-        self.assertEqual(end, 30)
+        (trange, literal) = find_string_literal(s)
+        self.assertEqual(trange.start, 29)
+        self.assertEqual(trange.end, 30)
         self.assertEqual(literal.value, '')
         self.assertEqual(literal.quotes, ("'", "'"))
-        self.assertEqual(s[start:(end+1)], """''""")
+        self.assertEqual(s[trange.slice], """''""")
