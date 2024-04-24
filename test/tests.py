@@ -68,6 +68,11 @@ class TestParsing(TestCase):
             Parsable('aaaa').index('a', 4)
         self.assertTrue("`offset` must be smaller then len - 1" in str(cm.exception))
 
+    def test_parsable_index_substr_at_offset(self):
+        self.assertEqual(Parsable('abcd').index('a', 0), 0)
+        self.assertEqual(Parsable('abcd').index('b', 1), 0)
+        self.assertEqual(Parsable("""select * from gg where index='' and date >= '2023-01-01' """).index("'", 30), 0)
+
     def test_find_left_quote(self):
         s = [
             'he said """boo hoo""" to her face',
@@ -76,6 +81,7 @@ class TestParsing(TestCase):
             """'''Title:"Boy"'''""",
             '''Title:"Boy"''',
             'Title: "Boy"',
+            """select * from gg where index='' and date >= '2023-01-01' """
         ]
         e = [
             (8, '"""'),
@@ -83,7 +89,8 @@ class TestParsing(TestCase):
             (6, "'"),
             (0, "'''"),
             (6, '"'),
-            (7, '"')
+            (7, '"'),
+            (29,"'"),
         ]
         for s_i, e_i in zip(s,e):
             try:
@@ -100,6 +107,7 @@ class TestParsing(TestCase):
             """'''Title:"Boy"'''""",
             '''Title:"Boy"''',
             'Title: "Boy"',
+            """select * from gg where index='' and date >= '2023-01-01' """,
         ]
         inputs = [
             (8, '"""'),
@@ -107,9 +115,10 @@ class TestParsing(TestCase):
             (6, "'"),
             (0, "'''"),
             (6, '"'),
-            (7, '"')
+            (7, '"'),
+            (29,"'")
         ]
-        expected = [7, 2, 10, 11, 3, 3]
+        expected = [7, 2, 10, 11, 3, 3, 0]
         for s_i, (offset, left_quote), exp in zip(strs,inputs, expected):
             try:
                 result = find_enclosing_quote(s_i, left_quote, offset)
@@ -122,24 +131,24 @@ class TestParsing(TestCase):
         s = Parsable("select * from gg where index='done' and date >= '2023-01-01' ")
         ((start, end), literal) = find_string_literal(s)
         self.assertEqual(start, 29)
-        self.assertEqual(end, 35)
+        self.assertEqual(end, 34)
         self.assertEqual(literal.value, "done")
         self.assertEqual(literal.quotes, ("'", "'"))
-        self.assertEqual(s[start:end], "'done'")
+        self.assertEqual(s[start:(end+1)], "'done'")
 
         s = Parsable("""select * from gg where index='do"ne' and date >= '2023-01-01' """)
         ((start, end), literal) = find_string_literal(s)
         self.assertEqual(start, 29)
-        self.assertEqual(end, 36)
+        self.assertEqual(end, 35)
         self.assertEqual(literal.value, 'do"ne')
         self.assertEqual(literal.quotes, ("'", "'"))
-        self.assertEqual(s[start:end], """'do"ne'""")
+        self.assertEqual(s[start:(end+1)], """'do"ne'""")
 
 
         s = Parsable("""select * from gg where index='' and date >= '2023-01-01' """)
         ((start, end), literal) = find_string_literal(s)
         self.assertEqual(start, 29)
-        self.assertEqual(end, 31)
+        self.assertEqual(end, 30)
         self.assertEqual(literal.value, '')
         self.assertEqual(literal.quotes, ("'", "'"))
-        self.assertEqual(s[start:end], """''""")
+        self.assertEqual(s[start:(end+1)], """''""")

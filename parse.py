@@ -120,7 +120,8 @@ def find_left_quote(s: Union[Parsable, str], offset: int=0) -> Optional[Tuple[in
     return _index, quote
 
 def find_enclosing_quote(s: Union[Parsable, str], left_quote: str, offset: int=0) -> Optional[int]:
-    """searches for an enclosing quote and returns the index of the first instance"""
+    """searches for an enclosing quote and returns the index of it
+    returns None, if nothing is found"""
     if isinstance(s, str):
         s = Parsable(s)
     assert left_quote in QUOTES_DICT.keys(), f"unrecognized left quote, {left_quote=}"
@@ -130,6 +131,11 @@ def find_enclosing_quote(s: Union[Parsable, str], left_quote: str, offset: int=0
 
 def find_string_literal(s: Union[Parsable, str], offset: int=0) -> Optional[Tuple[Tuple[int, int], StringLiteral]]:
     """searches for the first instance from the left of a string literal, returns None if not found"""
+    
+    # used when no enclosing quote is found to print this 
+    # amount of characters in the ParseError message
+    verbose_depth = 25 
+
     if isinstance(s, str):
         s = Parsable(s)
     optional_result = find_left_quote(s, offset)
@@ -137,15 +143,15 @@ def find_string_literal(s: Union[Parsable, str], offset: int=0) -> Optional[Tupl
         return None
     else:
         left_index, left_quote = optional_result
-        optional_right = find_enclosing_quote(s, left_quote, offset=offset+left_index+len(left_quote))
+        optional_right = find_enclosing_quote(s, left_quote, offset=offset+left_index)
         if optional_right is None:
-            _right_hand = offset+left_index + 25
+            _right_hand = offset+left_index+verbose_depth
             raise ParseError(f"can't find enclosing quote for {s[(offset+left_index):_right_hand]}")
         else:
             start_index = offset + left_index
-            end_index = offset + left_index + optional_right + len(QUOTES_DICT[left_quote]) + 2
+            end_index = offset + left_index + optional_right + len(QUOTES_DICT[left_quote])
             literal_start_index = offset + left_index + len(left_quote)
             literal_end_index = literal_start_index + optional_right
-            literal = s[literal_start_index:(literal_end_index+1)]
+            literal = s[literal_start_index:(literal_end_index)]
             return ((start_index, end_index), StringLiteral((left_quote, QUOTES_DICT[left_quote]), literal))
 
