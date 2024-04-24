@@ -1,4 +1,4 @@
-from typing import Union, Tuple, Optional, List, Callable
+from typing import Union, Tuple, Optional, List, Callable, Any
 from dataclasses import dataclass
 
 @dataclass
@@ -115,10 +115,9 @@ def ensure_parsable(func: Callable) -> Callable:
         return func(s, *args, **kwargs)
     return wrapper
 
+@ensure_parsable
 def index_to_row_and_column(s: Union[Parsable, str], index: int) -> Tuple[int, int]:
     """given a str, will return the row/column representation of the index"""
-    if isinstance(s, str):
-        s = Parsable(s)
     assert isinstance(index, int), f"`i` must be an int"
     assert index >= 0, f"`i` must geq 0, got {index=}"
     assert index <= len(s) - 1, f"`i` must be less or equal to the length of `s`, got {len(s)=}, {index=}"
@@ -134,11 +133,10 @@ def index_to_row_and_column(s: Union[Parsable, str], index: int) -> Tuple[int, i
         i+=1
     return row, column
 
+@ensure_parsable
 def find_left_quote(s: Union[Parsable, str], offset: int=0) -> Optional[Tuple[int, str]]:
     """searches for a left quote and returns the index and type of quote
     if no quotes are found, returns a None"""
-    if isinstance(s, str):
-        s = Parsable(s)
     left = {}
     for k,v in QUOTES_DICT.items():
         index = s.index(v, offset=offset)
@@ -153,6 +151,7 @@ def find_left_quote(s: Union[Parsable, str], offset: int=0) -> Optional[Tuple[in
         quote, _index, _ = min_index[0]
     return _index, quote
 
+@ensure_parsable
 def find_enclosing_quote(s: Union[Parsable, str], left_quote: str, offset: int=0) -> Optional[int]:
     """searches for an enclosing quote and returns the index of it
     returns None, if nothing is found"""
@@ -163,6 +162,7 @@ def find_enclosing_quote(s: Union[Parsable, str], left_quote: str, offset: int=0
     search_offest = offset + len(left_quote)
     return s.index(right_quote, offset=search_offest)
 
+@ensure_parsable
 def find_string_literal(s: Union[Parsable, str], offset: int=0) -> Optional[Tuple[TextRange, StringLiteral]]:
     """searches for the first instance from the left of a string literal, returns None if not found"""
     
@@ -170,8 +170,6 @@ def find_string_literal(s: Union[Parsable, str], offset: int=0) -> Optional[Tupl
     # amount of characters in the ParseError message
     verbose_depth = 25 
 
-    if isinstance(s, str):
-        s = Parsable(s)
     optional_result = find_left_quote(s, offset)
     if optional_result is None:
         return None
@@ -192,9 +190,8 @@ def find_string_literal(s: Union[Parsable, str], offset: int=0) -> Optional[Tupl
                 StringLiteral((left_quote, QUOTES_DICT[left_quote]), literal)
                 )
 
+@ensure_parsable
 def parse_literals(s: Union[Parsable, str], offset=0) -> List[Tuple[TextRange, StringLiteral]]:
     """parses the entire string s and returns a list of Tuple[TextRange, StringLiteral]
     the list will be empty if none are found"""
-    if isinstance(s, str):
-        s = Parsable(s)
     pass
