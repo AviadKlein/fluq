@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from typing import Union, Tuple, Optional, List, Callable, Any
 from dataclasses import dataclass
+from warnings import WarningMessage
 
 @dataclass
 class Block:
@@ -31,6 +34,10 @@ class TextRange:
     @property
     def size(self) -> int:
         return len(self)
+    
+    def contains(self, index: int) -> bool:
+        assert isinstance(index, int), f"`index` must be of type int, got {type(index)=}"
+        return self.start <= index <= self.end
 
 @dataclass
 class StringLiteral(Expression):
@@ -55,8 +62,11 @@ class Query(Block):
 
 class ParseError(Exception):
     
-    def __init__(self, *args: object) -> None:
-        super().__init__(*args)
+    def __init__(self, message: str, s: Parsable) -> None:
+        self.s = s
+        super().__init__(message)
+    
+
 
 QUOTES_DICT = {
         '"':'"',
@@ -73,7 +83,6 @@ class Parsable:
 
     def __init__(self, s: str):
         assert isinstance(s, str), f"`s` must be a str, got {type(s)=}"
-        assert len(s) > 0, f"`s` can't be an empty str"
         self.s = s
         self.enumerated = enumerate(s)
     
@@ -84,8 +93,8 @@ class Parsable:
     def __len__(self) -> int:
         return self.size
     
-    def __getitem__(self, index):
-        return self.s[index]
+    def __getitem__(self, index) -> Parsable:
+        return Parsable(self.s[index])
     
     def index(self, substr: str, offset: int=0) -> Optional[int]:
         """searches for substr within s and returns its index, returns None if not found
@@ -110,7 +119,7 @@ def ensure_parsable(func: Callable) -> Callable:
         if isinstance(s, str):
             s = Parsable(s)
         elif not isinstance(s, Parsable):
-            raise TypeError(f"Argument 's' must be of type 'str' or 'Parsable', got {type(s)=}")
+            raise TypeError(f"`s` must be of type 'str' or 'Parsable', got {type(s)=}")
         # Call the original function with the new 's' and other arguments
         return func(s, *args, **kwargs)
     return wrapper
@@ -125,7 +134,7 @@ def index_to_row_and_column(s: Union[Parsable, str], index: int) -> Tuple[int, i
     column = 0
     i = 0
     while i < index:
-        if s[i] == '\n':
+        if s[i].s == '\n':
             row += 1
             column = 0
         else:
@@ -178,20 +187,90 @@ def find_string_literal(s: Union[Parsable, str], offset: int=0) -> Optional[Tupl
         optional_right = find_enclosing_quote(s, left_quote, offset=offset+left_index)
         if optional_right is None:
             _right_hand = offset+left_index+verbose_depth
-            raise ParseError(f"can't find enclosing quote for {s[(offset+left_index):_right_hand]}")
+            raise ParseError(f"can't find enclosing quote for {s[(offset+left_index):_right_hand]}", s)
         else:
             start_index = offset + left_index
             end_index = offset + left_index + optional_right + len(QUOTES_DICT[left_quote])
             literal_start_index = offset + left_index + len(left_quote)
             literal_end_index = literal_start_index + optional_right
-            literal = s[literal_start_index:(literal_end_index)]
+            literal = s[literal_start_index:(literal_end_index)].s # this needs to be of type `str`
             return (
                 TextRange(start_index, end_index), 
                 StringLiteral((left_quote, QUOTES_DICT[left_quote]), literal)
                 )
 
 @ensure_parsable
-def parse_literals(s: Union[Parsable, str], offset=0) -> List[Tuple[TextRange, StringLiteral]]:
+def parse_literals(s: Union[Parsable, str], offset: int=0) -> List[Tuple[TextRange, StringLiteral]]:
     """parses the entire string s and returns a list of Tuple[TextRange, StringLiteral]
     the list will be empty if none are found"""
-    pass
+    end = len(s) - 1
+    results = []
+    while offset < end:
+        result = find_string_literal(s, offset)
+        if result is None:
+            break
+        else:
+            results.append(result)
+            offset += (result[0].end + 1)
+    return results
+
+@ensure_parsable
+def find_left_parenthesis(s: Union[Parsable, str], 
+                          offset: int=0, 
+                          text_ranges: Optional[List[TextRange]]=None) -> Optional[int]:
+    """returns the index of the first '(' found from the offset position, ignores string literals
+    text_ranges can be passed to save computation time"""
+    if text_ranges is None:
+        text_ranges = [text_range for text_range, _ in parse_literals(s[offset:])]
+
+    result = s.index('(', offset=offset)
+
+    if result is not None:
+        if any([text_range.contains(offset+result) for text_range in text_ranges]):
+            return result + 1 + find_left_parenthesis(s, offset=offset+result+1, text_ranges=text_ranges)
+        else:
+            return result
+    else:
+        return None
+    
+@ensure_parsable
+def find_enclosing_parenthesis(s: Union[Parsable, str], 
+                               offset: int=0, 
+                               ) -> Optional[int]:
+    """searches for enclosing ')', ignores literals
+    offset needs to be the location of the left parenthesis"""
+    
+    text_ranges = [text_range for text_range, _ in parse_literals(s)]
+    result = None
+    depth = 0
+    enumerated = list(s.enumerated)[(offset):]
+    enumerated = list(filter(lambda i: all([~text_range.contains(i) for text_range in text_ranges]), enumerated))
+
+    for i, char in enumerated:
+        if char == '(':
+            depth += 1
+        elif char == ')':
+            if depth == 1:
+                result = i
+            else:
+                depth -= 1
+        else: # other characters
+            pass
+        
+    return result
+        
+
+@ensure_parsable
+def parse_parenthesis(s: Union[Parsable, str], 
+                      so_far: Optional[List[Tuple[TextRange, Parsable]]]=None, 
+                      offset: int=0) -> List[Tuple[TextRange, Parsable]]:
+    result = [] if so_far is None else so_far
+    left = find_left_parenthesis(s, offset)
+    if left is None:
+        return result
+    else:
+        right = find_enclosing_parenthesis(s, left)
+        if right is None:
+            raise ParseError(f"can't find enclosing right parenthesis", s)
+        
+

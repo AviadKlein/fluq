@@ -26,8 +26,6 @@ class TestParsing(TestCase):
         tr = TextRange(1,2)
         self.assertEqual('abcdefg'[tr.slice], 'bc')
 
-
-
     def test_parsable_len(self):
         s = "the quick brown fox"
         result = Parsable(s)
@@ -37,21 +35,33 @@ class TestParsing(TestCase):
     def test_parsable_getitem(self):
         s = "the quick brown fox"
         result = Parsable(s)
-        self.assertEqual(result[0], 't')
-        self.assertEqual(result[1], 'h')
-        self.assertEqual(result[:3], 'the')
-        self.assertEqual(result[-3:], 'fox')
-        self.assertEqual(result[-1], 'x')
-        self.assertEqual(result[-3], 'f')
+        self.assertEqual(result[0].s, 't')
+        self.assertEqual(result[1].s, 'h')
+        self.assertEqual(result[:3].s, 'the')
+        self.assertEqual(result[-3:].s, 'fox')
+        self.assertEqual(result[-1].s, 'x')
+        self.assertEqual(result[-3].s, 'f')
 
     def test_parsable_init(self):
         with self.assertRaises(AssertionError) as cm:
             Parsable(44)
         self.assertTrue("`s` must be a str, got type(s)=<class 'int'" in str(cm.exception))
     
-        with self.assertRaises(AssertionError) as cm:
-            Parsable("")
-        self.assertTrue("`s` can't be an empty str" in str(cm.exception))
+        p = Parsable("")
+        self.assertEqual(len(p), 0)
+
+    def test_ensure_parsable(self):
+        @ensure_parsable
+        def f(s: Union[Parsable, str]):
+            return s
+        
+        with self.assertRaises(TypeError) as cm:
+            f(1)
+        print(str(cm.exception))
+        self.assertTrue("`s` must be of type 'str' or 'Parsable', got type(s)=<class 'int'>" in str(cm.exception))
+
+        self.assertTrue(isinstance(f('a'), Parsable))
+        
 
     def test_index_to_row_and_column(self):
         s = "the quick brown fox"
@@ -158,7 +168,7 @@ class TestParsing(TestCase):
         self.assertEqual(trange.end, 34)
         self.assertEqual(literal.value, "done")
         self.assertEqual(literal.quotes, ("'", "'"))
-        self.assertEqual(s[trange.slice], "'done'")
+        self.assertEqual(s[trange.slice].s, "'done'")
 
         s = Parsable("""select * from gg where index='do"ne' and date >= '2023-01-01' """)
         (trange, literal) = find_string_literal(s)
@@ -166,7 +176,7 @@ class TestParsing(TestCase):
         self.assertEqual(trange.end, 35)
         self.assertEqual(literal.value, 'do"ne')
         self.assertEqual(literal.quotes, ("'", "'"))
-        self.assertEqual(s[trange.slice], """'do"ne'""")
+        self.assertEqual(s[trange.slice].s, """'do"ne'""")
 
 
         s = Parsable("""select * from gg where index='' and date >= '2023-01-01' """)
@@ -175,4 +185,59 @@ class TestParsing(TestCase):
         self.assertEqual(trange.end, 30)
         self.assertEqual(literal.value, '')
         self.assertEqual(literal.quotes, ("'", "'"))
-        self.assertEqual(s[trange.slice], """''""")
+        self.assertEqual(s[trange.slice].s, """''""")
+
+    def test_parse_litarals(self):
+        s = """hello mr. 'di"n"gy' my name is 'ro""ber'!"""
+        result = parse_literals(s)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0][1].value, 'di"n"gy')
+        self.assertEqual(result[1][1].value, 'ro""ber')
+
+        s = """number '1', number '''2''', number r'''3'''"""
+        result = parse_literals(s)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[2][1].quotes, ("'''", "'''"))
+
+        
+        s = """number r'''3"""
+        with self.assertRaises(ParseError) as cm:
+            parse_literals(s)
+        self.assertTrue("can't find enclosing quote for" in str(cm.exception))
+
+    def test_find_left_parenthesis(self):
+        result = find_left_parenthesis("start (here) and end (there)")
+        self.assertEqual(result, 6)
+
+        result = find_left_parenthesis("start '(here)' and end (there)")
+        self.assertEqual(result, 23)
+
+        result = find_left_parenthesis("start '(here)' and end '(there)' and (tither) too")
+        self.assertEqual(result, 37)
+
+    def test_find_enclosing_parenthesis(self):
+        s = "start (here) and end (there)"
+        offset = find_left_parenthesis(s)
+        self.assertEqual(offset, 6)
+        result = find_enclosing_parenthesis(s, offset=offset)
+        self.assertEqual(result, 11)
+
+        
+        offset = find_left_parenthesis(s, offset=result) + result
+        result = find_enclosing_parenthesis(s, offset=offset)
+        self.assertEqual(offset, 21)
+        self.assertEqual(result, 27)
+
+    def test_find_enclosing_parenthesis_multiple(self):
+        s = "(((((((horse)))))))"
+        offset = find_left_parenthesis(s)
+        result = find_enclosing_parenthesis(s, offset=offset)
+        self.assertEqual(offset, 0)
+        self.assertEqual(result, 18)
+
+        s = "((((horse)))" # 1 is missing
+        offset = find_left_parenthesis(s)
+        result = find_enclosing_parenthesis(s, offset=offset)
+        self.assertEqual(offset, 0)
+        self.assertIsNone(result)
+
