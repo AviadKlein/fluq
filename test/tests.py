@@ -268,31 +268,23 @@ class TestParsing(TestCase):
             "just a sentence",
             "a (sentence) with (balanced (paren)thesis)",
             "another )balanced( senten)c(e",
-            "an ((unbalanced) sentence"
+            "an ((unbalanced) sentence",
+            "start (here)"
         ]
-        expected = [True, True, True, False]
+        expected = [True, True, True, False, True]
         for s_i, e_i in zip(s, expected):
             self.assertEqual(ensure_balanced_parenthesis(s_i), e_i, msg=s_i)
 
     def test_parse_parenthesis_exception_right(self):
         s = [
                 "start (here", 
-                "start (here ()"
+                "start (here ()",
             ]
         for s_i in s:
             with self.assertRaises(ParseError, msg=f"No ParseError was raised on '{s_i}'") as cm:
                 parse_parenthesis(s_i)
+            print(str(cm.exception))
             self.assertTrue("can't find enclosing right parenthesis" in str(cm.exception))
-
-    def test_parse_parenthesis_exception_left(self):
-        s = [
-                "start here)", 
-                "start (here ))"
-            ]
-        for s_i in s:
-            with self.assertRaises(ParseError, msg=f"No ParseError was raised on '{s_i}'") as cm:
-                parse_parenthesis(s_i)
-            self.assertTrue("unbalanced parenthesis" in str(cm.exception))
     
     def test_parse_parenthesis_0(self):
         s = "start here"

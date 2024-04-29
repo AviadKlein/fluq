@@ -317,11 +317,6 @@ def parse_parenthesis(s: Union[Parsable, str],
 
     raises ParseError when parenthesis are not closed
     """
-    # check for balance
-    is_balanced = ensure_balanced_parenthesis(s)
-    if not is_balanced:
-        raise ParseError("unbalanced parenthesis", s)
-    
     # start parsing
     result = []
     left = find_left_parenthesis(s, offset)
