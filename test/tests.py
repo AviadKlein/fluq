@@ -65,6 +65,12 @@ class TestParsing(TestCase):
         result = p.reversed()
         self.assertEqual(result.s, "(ereht) dne (ereh) trats")
 
+    def test_parsable_mask(self):
+        p = Parsable('something to mask something to keep')
+        result = p.mask(13,16)
+        self.assertEqual(len(result), len(p))
+        self.assertEqual(result.s, "something to 😊😊😊😊 something to keep")        
+
     def test_ensure_parsable(self):
         @ensure_parsable
         def f(s: Union[Parsable, str]):
@@ -220,6 +226,11 @@ class TestParsing(TestCase):
             parse_literals(s)
         self.assertTrue("can't find enclosing quote for" in str(cm.exception))
 
+    def test_find_left_parenthesis_ignore_literals(self):
+        s = "start here '(ignore this)' end here"
+        result = find_left_parenthesis(s)
+        self.assertIsNone(result)
+    
     def test_find_left_parenthesis(self):
         result = find_left_parenthesis("start (here) and end (there)")
         self.assertEqual(result, 6)
@@ -292,6 +303,12 @@ class TestParsing(TestCase):
 
         self.assertTrue(isinstance(result, list))
         self.assertEqual(len(result), 0)
+
+        s = "start here '(ignore this)' end here"
+        result = parse_parenthesis(s)
+
+        # self.assertTrue(isinstance(result, list))
+        # self.assertEqual(len(result), 0)
     
     def test_parse_parenthesis_1(self):
         s = "start (here)"

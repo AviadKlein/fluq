@@ -4,6 +4,7 @@ from typing import Union, Tuple, Optional, List, Callable, Any
 from copy import copy
 from collections import Counter
 from dataclasses import dataclass
+import re
 
 
 @dataclass
@@ -56,11 +57,18 @@ class StringLiteral(Expression):
     value: str
 
     @property
-    def original_size(self):
-        return sum()
+    def key(self) -> str:
+        return self.quotes[0]
+
+    def __post_init__(self):
+        assert self.key in QUOTES_DICT.keys(), f"unsupported LHS quote {self.key}"
+        assert QUOTES_DICT[self.key] == self.quotes[1]
+    
+
 
 @dataclass
 class Query(Block):
+    CTE: Optional[List[Query]]
     FROM: Expression
     WHERE: Expression
     GROUP_BY: Expression
@@ -106,7 +114,8 @@ class Parsable:
     def __getitem__(self, index) -> Parsable:
         return Parsable(self.s[index])
     
-    def index(self, substr: str, offset: int=0) -> Optional[int]:
+    def index(self, substr: str, 
+              offset: int=0) -> Optional[int]:
         """searches for substr within s and returns its index, returns None if not found
         offset is used to start the search from a specific index
         in case offset is not 0, the returned index will be 'offseted'
@@ -114,6 +123,7 @@ class Parsable:
         assert isinstance(substr, str), f"`substr` must be of type str, got {type(substr)=}"
         assert offset >= 0, f"`offset` can't be negative"
         assert offset <= len(self)-1, f"`offset` must be smaller then len - 1"
+
         try:
             return self.s[offset:].index(substr)
         except ValueError as ve:
@@ -121,6 +131,9 @@ class Parsable:
                 return None
             else:
                 raise ve
+            
+    def strip(self) -> Parsable:
+        return Parsable(self.s.strip())
             
     def __repr__(self):
         _len = 10 if self.size > 10 else self.size
@@ -138,6 +151,19 @@ class Parsable:
             new_s[j] = '('
         new_s.reverse()
         return Parsable(''.join(new_s))
+    
+    def mask(self, start: int, end: int, mask: str='\U0001F60A') -> Parsable:
+        assert isinstance(start, int)
+        assert isinstance(end, int)
+        assert start <= end
+        
+        result = []
+        for i,c in enumerate(self.s):
+            if start <= i <= end:
+                result.append(mask)
+            else:
+                result.append(c)
+        return Parsable(''.join(result))
  
 
 def ensure_parsable(func: Callable) -> Callable:
@@ -243,22 +269,15 @@ def parse_literals(s: Union[Parsable, str], offset: int=0) -> List[Tuple[TextRan
 
 @ensure_parsable
 def find_left_parenthesis(s: Union[Parsable, str], 
-                          offset: int=0, 
-                          text_ranges: Optional[List[TextRange]]=None) -> Optional[int]:
-    """returns the index of the first '(' found from the offset position, ignores string literals
-    text_ranges can be passed to save computation time"""
-    if text_ranges is None:
-        text_ranges = [text_range for text_range, _ in parse_literals(s[offset:])]
+                          offset: int=0) -> Optional[int]:
+    """returns the index of the first '(' found from the offset position, ignores string literals"""
+    text_ranges = [text_range for text_range, _ in parse_literals(s)]
+    
+    for text_range in text_ranges:
+        s = s.mask(text_range.start, text_range.end)
 
     result = s.index('(', offset=offset)
-
-    if result is not None:
-        if any([text_range.contains(offset+result) for text_range in text_ranges]):
-            return result + 1 + find_left_parenthesis(s, offset=offset+result+1, text_ranges=text_ranges)
-        else:
-            return result
-    else:
-        return None
+    return result
     
 @ensure_parsable
 def find_enclosing_parenthesis(s: Union[Parsable, str], 
@@ -341,5 +360,12 @@ def parse_parenthesis(s: Union[Parsable, str],
             result_cont = [(a,b.shift(right),c) for a,b,c in result_cont]
             result += result_cont
     return result
-        
+
+
+@ensure_parsable
+def parse_query(s: Union[Parsable, str]) -> Query:
+    writing_order = ['WITH', 'SELECT', 'FROM', 'WHERE', 'GROUP BY', 'HAVING', 'QUALIFY', 'ORDER BY', 'LIMIT', 'OFFSET']
+    s = s.strip()
+    literals = parse_literals(s)
+    parenthesis = parse_parenthesis(s)
 
