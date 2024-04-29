@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from typing import Union, Tuple, Optional, List, Callable, Any
+from copy import copy
+from collections import Counter
 from dataclasses import dataclass
-from warnings import WarningMessage
+
 
 @dataclass
 class Block:
@@ -24,7 +26,7 @@ class TextRange:
         assert self.start < self.end, f"`end` must be greater than `start`, got {self.start=}, {self.end=}"
 
     @property
-    def slice(self) -> Tuple[int, int]:
+    def slice(self) -> slice:
         return slice(self.start, self.end+1)
     
     @property
@@ -36,8 +38,17 @@ class TextRange:
         return len(self)
     
     def contains(self, index: int) -> bool:
+        """returns a boolean whether the index is between start and end"""
         assert isinstance(index, int), f"`index` must be of type int, got {type(index)=}"
         return self.start <= index <= self.end
+    
+    def __add__(self, other: int) -> TextRange:
+        assert isinstance(other, int), f"addition is only supported for int, got {type(other)=}"
+        return TextRange(self.start+other, self.end+other)
+
+    def shift(self, by: int) -> TextRange:
+        """'shifts' the indices by stated amount, returns as a new object"""
+        return self.__add__(by)
 
 @dataclass
 class StringLiteral(Expression):
@@ -83,8 +94,7 @@ class Parsable:
 
     def __init__(self, s: str):
         assert isinstance(s, str), f"`s` must be a str, got {type(s)=}"
-        self.s = s
-        self.enumerated = enumerate(s)
+        self.s = s # the original str
     
     @property
     def size(self) -> int:
@@ -111,7 +121,24 @@ class Parsable:
                 return None
             else:
                 raise ve
-        
+            
+    def __repr__(self):
+        _len = 10 if self.size > 10 else self.size
+        return f"{self.__class__.__name__}('{self.s[:_len]}...')"
+    
+    def reversed(self) -> Parsable:
+        "reverses the str, but flips the direction of parenthesis"
+        lefts = set([i for i,c in enumerate(self.s) if c == '('])
+        rights = set([i for i,c in enumerate(self.s) if c == ')'])
+        new_s = list(copy(self.s))
+
+        for i in lefts:
+            new_s[i] = ')'
+        for j in rights:
+            new_s[j] = '('
+        new_s.reverse()
+        return Parsable(''.join(new_s))
+ 
 
 def ensure_parsable(func: Callable) -> Callable:
     def wrapper(s: Union[str, Parsable], *args, **kwargs) -> Any:
@@ -243,7 +270,8 @@ def find_enclosing_parenthesis(s: Union[Parsable, str],
     text_ranges = [text_range for text_range, _ in parse_literals(s)]
     result = None
     depth = 0
-    enumerated = list(s.enumerated)[(offset):]
+    enumerated = enumerate(s.s)
+    enumerated = list(enumerated)[offset:]
     enumerated = list(filter(lambda i: all([~text_range.contains(i) for text_range in text_ranges]), enumerated))
 
     for i, char in enumerated:
@@ -258,19 +286,65 @@ def find_enclosing_parenthesis(s: Union[Parsable, str],
             pass
         
     return result
-        
+
+@ensure_parsable
+def ensure_balanced_parenthesis(s: Union[Parsable, str], offset: int=0) -> bool:
+    """checks if the number of '(' and ')' is balanced, ignores literals"""
+    text_ranges = [text_range for text_range, _ in parse_literals(s[offset:])]
+    cnt = []
+    for i,char in enumerate(s[offset:].s):
+        if any([tr.contains(i) for tr in text_ranges]):
+            pass
+        else:
+            cnt.append(char)
+    cnt = Counter(cnt)
+    return cnt['('] == cnt[')']
+
 
 @ensure_parsable
 def parse_parenthesis(s: Union[Parsable, str], 
-                      so_far: Optional[List[Tuple[TextRange, Parsable]]]=None, 
-                      offset: int=0) -> List[Tuple[TextRange, Parsable]]:
-    result = [] if so_far is None else so_far
+                      offset: int=0, 
+                      level: int=0) -> List[Tuple[int, TextRange, Parsable]]:
+    """returns a list of (depth, TextRange, Parsable)
+    where depth is the depth of parenthesis
+    text_range is a TextRange object of the parenthesis
+    Parsable is the remaining str within the parenthesis
+    
+    for the str: "(the quick (brown (fox)))"
+    the sub str "the quick" will be at level 0
+    the sub str "brown" will be at level 1
+    the sub str "fox" will be at level 2
+
+    raises ParseError when parenthesis are not closed
+    """
+    # check for balance
+    is_balanced = ensure_balanced_parenthesis(s)
+    if not is_balanced:
+        raise ParseError("unbalanced parenthesis", s)
+    
+    # start parsing
+    result = []
     left = find_left_parenthesis(s, offset)
     if left is None:
-        return result
+        pass
     else:
-        right = find_enclosing_parenthesis(s, left)
+        left += offset
+        right = find_enclosing_parenthesis(s[offset:], offset=left)
         if right is None:
             raise ParseError(f"can't find enclosing right parenthesis", s)
+        else:
+            
+            # construct result
+            text_range = TextRange(left, right)
+            sub_parsable = s[text_range.slice]
+            result += [(level, text_range, sub_parsable)]
+
+            # recursively parse the remaining Parsable
+            if len(sub_parsable) > 2:
+                result += parse_parenthesis(sub_parsable[1:-1], level=level+1)
+            result_cont = parse_parenthesis(s[right:], level=level)
+            result_cont = [(a,b.shift(right),c) for a,b,c in result_cont]
+            result += result_cont
+    return result
         
 
