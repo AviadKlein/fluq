@@ -256,10 +256,10 @@ class TestParsing(TestCase):
         self.assertEqual(result, 11)
 
         
-        # offset = find_left_parenthesis(s, offset=result) + result
-        # result = find_enclosing_parenthesis(s, offset=offset)
-        # self.assertEqual(offset, 21)
-        # self.assertEqual(result, 27)
+        offset = find_left_parenthesis(s, offset=result) + result
+        result = find_enclosing_parenthesis(s, offset=offset)
+        self.assertEqual(offset, 21)
+        self.assertEqual(result, 27)
 
     def test_find_enclosing_parenthesis_multiple(self):
         s = "(((((((horse)))))))"
@@ -307,8 +307,8 @@ class TestParsing(TestCase):
         s = "start here '(ignore this)' end here"
         result = parse_parenthesis(s)
 
-        # self.assertTrue(isinstance(result, list))
-        # self.assertEqual(len(result), 0)
+        self.assertTrue(isinstance(result, list))
+        self.assertEqual(len(result), 0)
     
     def test_parse_parenthesis_1(self):
         s = "start (here)"
@@ -373,6 +373,4 @@ class TestParsing(TestCase):
 
         self.assertEqual(result[4][0], 2)
         self.assertEqual(result[4][1], TextRange(36,43))
-
-
 

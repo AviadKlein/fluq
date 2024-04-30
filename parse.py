@@ -368,4 +368,5 @@ def parse_query(s: Union[Parsable, str]) -> Query:
     s = s.strip()
     literals = parse_literals(s)
     parenthesis = parse_parenthesis(s)
+    
 
