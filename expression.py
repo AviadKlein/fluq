@@ -5,6 +5,7 @@ from typing import Any, List, Tuple, Optional, Union
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import string
+import re
 
 
 
@@ -18,8 +19,16 @@ class ValidName:
         return ''.join(['_', *string.ascii_letters])
     
     @property
-    def allowed_chars_beyond_first(self) -> str:
+    def allowed_last_chars(self) -> str:
         return self.allowed_first_chars + string.digits
+    
+    @property
+    def allowed_mid_chars(self) -> str:
+        return self.allowed_last_chars + "."
+    
+    @staticmethod
+    def remove_redundant_dots(s: str):
+        return re.sub(r'\.+', '.', s)
 
     def __post_init__(self):
         if isinstance(self.name, ValidName):
@@ -30,11 +39,12 @@ class ValidName:
 
             for i, char in enumerate(self.name):
                 bad_char_condition = (i == 0 and char not in self.allowed_first_chars)
-                bad_char_condition |= (i > 0 and char not in self.allowed_chars_beyond_first)
+                bad_char_condition |= (i > 0 and char not in self.allowed_mid_chars)
                 if bad_char_condition:
                         bad_chars.append((i, char))
             if len(bad_chars) > 0:
                 raise Exception(f"illegal name, due to bad characters in these locations: {bad_chars}")
+        self.name = self.remove_redundant_dots(self.name)
 
 
 @dataclass
@@ -63,18 +73,29 @@ class Expression(ABC):
     @property
     def sql(self, indent: Indent = Indent()) -> str:
         return f"{indent}{self.unindented_sql()}"
-
-    def to_logical(self) -> LogicalOperationExpression:
-        """every expression can be a logical one"""
-        return IsNotNull(self)
     
+class AnyExpression(Expression):
+
+    def __init__(self, expr: str):
+        self.expr = expr
+
+    def unindented_sql(self) -> str:
+        return self.expr
+        
+    
+
 class FutureExpression(Expression):
     """this is a place holder for until I solve the issue of subqueries used in the logical:
     col IN (select from ...)"""
     
 
+class ToLogicalMixin(Expression):
 
-class ColumnExpression(Expression):
+    def to_logical(self) -> LogicalOperationExpression:
+        return IsNotNull(self)
+
+
+class ColumnExpression(ToLogicalMixin):
     """when you just want to point to a column"""
 
     def __init__(self, name: str):
@@ -88,7 +109,7 @@ class ColumnExpression(Expression):
         return self.name
 
 
-class Literal(Expression):
+class Literal(ToLogicalMixin):
     
     def __init__(self, value: str | int | float | bool) -> None:
         super().__init__()
@@ -107,58 +128,13 @@ class Literal(Expression):
         return self.sql_value
 
 
-class NullExpression(Expression):
+class NullExpression(ToLogicalMixin):
 
     def unindented_sql(self) -> str:
         return "NULL"
 
 
-class TablePointer:
-    
-    def __init__(self, table_name: str, alias: Optional[str]=None):
-        self._table_name = ValidName(table_name)
-        self._alias = None if alias is None else ValidName(alias)
-
-    
-    @property
-    def table_name(self) -> str:
-        return self._table_name.name
-           
-    @property
-    def alias(self) -> Optional[str]:
-        if self._alias is not None:
-            return self._alias.name
-        else:
-            return None
-        
-    def from_statement(self) -> str:
-        ret = f"{self.table_name}"
-        if self.alias is not None:
-            ret += f" as {self.alias}"
-        return ret
-    
-    def unindented_sql(self) -> str:
-        return self.alias if self.alias is not None else self.table_name
-
-    
-    
-class TableColumnExpression(Expression):
-
-    def __init__(self, table: TablePointer, column_name: str):
-        self.table = table
-        self._column_name = ValidName(column_name)
-
-    @property
-    def column_name(self) -> str:
-        return self._column_name.name
-    
-    def unindented_sql(self) -> str:
-        return f"{self.table.sql}.{self.column_name}"
-        
-    
-
-
-class AbstractOperationExpression(Expression, ABC):
+class AbstractOperationExpression(ToLogicalMixin):
     """all operations happen between 2 expressions"""
     
     def __init__(self, left: Expression, right: Expression):
@@ -417,3 +393,82 @@ class CaseExpression(Expression):
         cases = '\n'.join(cases)
         otherwise = "" if self.otherwise is None else f"\n{indent.plus1()}ELSE {self.otherwise.unindented_sql()}"
         return f"{indent}CASE\n{cases}{otherwise}\n{indent}END"
+    
+
+
+class JoinOperationExpression(Expression):
+    """a base class for all relational operations"""
+
+    def __init__(self,
+                 left: Expression | JoinOperationExpression,
+                 right: Expression,
+                 left_alias: Optional[str]=None,
+                 right_alias: Optional[str]=None,
+                 on: Optional[LogicalOperationExpression]=None):
+        assert isinstance(left, Expression)
+        assert isinstance(right, Expression)
+        if on is not None:
+            assert isinstance(on, LogicalOperationExpression)
+
+        self.left = left
+        self.right = right
+
+        if isinstance(self.left, JoinOperationExpression):
+            assert self.left_alias is None, f"JoinOperationExpression can't have an alias"
+        
+        self.left_alias = ValidName(left_alias).name if left_alias is not None else None
+        self.right_alias = ValidName(right_alias).name if right_alias is not None else None
+        self.on = on
+
+    @abstractmethod
+    def operator(self) -> str:
+        pass
+
+    def on_clause(self) -> str:
+        return f" {self.on.sql}" if self.on is not None else ""
+
+    def unindented_sql(self) -> str:
+        left = self.left.sql
+        if self.left_alias is not None:
+            left = f"{left} AS {self.left_alias}"
+        right = self.right.sql
+        if self.right_alias is not None:
+            right = f"{right} AS {self.right_alias}"
+        return f"{left} {self.operator()} {right}{self.on_clause()}"
+
+class InnerJoinOperationExpression(JoinOperationExpression):
+    
+    def operator(self) -> str:
+        return "INNER JOIN"
+    
+class LeftJoinOperationExpression(JoinOperationExpression):
+    
+    def operator(self) -> str:
+        return "LEFT OUTER JOIN"
+    
+class RightJoinOperationExpression(JoinOperationExpression):
+    
+    def operator(self) -> str:
+        return "RIGHT OUTER JOIN"
+    
+class FullOuterJoinOperationExpression(JoinOperationExpression):
+
+    def operator(self) -> str:
+        return "FULL OUTER JOIN"
+    
+class CrossJoinOperationExpression(JoinOperationExpression):
+
+    def __init__(self, 
+                 left: Expression | JoinOperationExpression, 
+                 right: Expression, 
+                 left_alias: str | None = None, 
+                 right_alias: str | None = None):
+        super().__init__(left, right, left_alias, right_alias, None)
+
+    def on_clause(self) -> str:
+        return ""
+    
+    def operator(self) -> str:
+        return "CROSS JOIN"
+    
+    

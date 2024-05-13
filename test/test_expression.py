@@ -40,6 +40,10 @@ class TestValidName(TestCase):
         expceted = "illegal name, due to bad characters in these locations: [(1, ';')]"
         self.assertEqual(expceted, str(cm.exception))
 
+    def test_validname_dots(self):
+        self.assertEqual(ValidName("a.b.c").name, "a.b.c")
+        self.assertEqual(ValidName("a....b..c").name, "a.b.c")
+
 class TestExpression(TestCase):
 
     def test_inheritance(self):
@@ -143,10 +147,26 @@ class TestExpression(TestCase):
         
         self.assertMultiLineEqual(case.sql, expected)
 
-            
-
-    
+    def test_join_operation(self):
         
+        inner = InnerJoinOperationExpression(left=AnyExpression("t1"), right=AnyExpression("t2"))
+        self.assertEqual(inner.sql, "t1 INNER JOIN t2")
 
-
+        inner = InnerJoinOperationExpression(
+            left=AnyExpression("t1"), 
+            right=AnyExpression("t2"),
+            left_alias="a")
         
+        self.assertEqual(inner.sql, "t1 AS a INNER JOIN t2")
+
+        left = LeftJoinOperationExpression(
+            left=AnyExpression("t1"), 
+            right=AnyExpression("t2"),
+            left_alias="a", right_alias="b")
+        
+        self.assertEqual(left.sql, "t1 AS a LEFT OUTER JOIN t2 AS b")
+
+        left_on = LeftJoinOperationExpression(
+            left=AnyExpression("t1"), 
+            right=AnyExpression("t2"),
+            left_alias="a", right_alias="b")
