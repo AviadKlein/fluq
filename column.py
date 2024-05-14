@@ -33,7 +33,7 @@ class Column:
     @classmethod
     def _resolve_type(cls, s: str | int | float | bool | Column) -> Column:
         if isinstance(s, (str, int, float, bool)):
-            return Column(Literal(s))
+            return Column(LiteralExpression(s))
         elif isinstance(s, Column):
             return s
         else:
@@ -98,7 +98,7 @@ class Column:
         return Column(Like(self.expr, other.expr))
     
     def negate(self) -> Column:
-        return Column(Literal(0)).minus(self)
+        return Column(LiteralExpression(0)).minus(self)
     
     @resolve_column_function_type_decorator
     def __add__(self, other: str | int | float | bool | Column) -> Column:

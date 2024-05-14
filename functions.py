@@ -1,6 +1,6 @@
 from typing import Any
 
-from expression import Expression, CaseExpression, Literal
+from expression import Expression, CaseExpression, LiteralExpression
 from column import Column
 
 
@@ -10,7 +10,7 @@ def when(condition: Column, value: Any) -> Column:
     >>> case = when(col.equal(2), "a").when(col.equal(3), "b").otherwise("c")
     """
     if isinstance(value, (int, float, str, bool)):
-        value = Literal(value)
+        value = LiteralExpression(value)
     elif isinstance(value, Column):
         value = value.expr
     elif isinstance(value, Expression):
