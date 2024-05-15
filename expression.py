@@ -69,7 +69,8 @@ class Indent:
 
 # Expressions
 class Expression(ABC):
-    """This is the basic workhorse"""
+    """This is the basic workhorse
+    expressions 'sql' themselves and can hold other expressions"""
 
     @abstractmethod
     def unindented_sql(self) -> str:
@@ -770,21 +771,75 @@ class FromClauseExpression(ClauseExpression):
     
     def unindented_sql(self) -> str:
         # resolve item:
-        from_item_str = self.from_item.sql
+        from_item_str = self.from_item.unindented_sql()
         if self.alias is not None:
             from_item_str = f"{from_item_str} AS {self.alias}"
         return f"FROM {from_item_str}"
-        
 
 
+class PredicateClauseExpression(ClauseExpression):
+    """an abstract class to suport WHERE, HAVING and QUALIFY clauses"""
 
-        
-        
-            
-            
-            
+    def __init__(self, predicate: LogicalOperationExpression):
+        assert isinstance(predicate, LogicalOperationExpression)
+        self.predicate = predicate
 
-
-        
+    def and_(self, predicate: LogicalOperationExpression):
+        assert isinstance(predicate, LogicalOperationExpression)
+        new_predicate = And(left=self.predicate, right=predicate)
+        return self.__class__(new_predicate)
+    
+    def or_(self, predicate: LogicalOperationExpression):
+        assert isinstance(predicate, LogicalOperationExpression)
+        new_predicate = Or(left=self.predicate, right=predicate)
+        return self.__class__(new_predicate)
+    
+    @abstractmethod
+    def clause_symbol(self) -> str:
+        pass
+    
+    def unindented_sql(self) -> str:
+        return f"{self.clause_symbol()} {self.predicate.unindented_sql()}"
     
     
+
+class WhereClauseExpression(PredicateClauseExpression):
+    
+    def clause_symbol(self) -> str:
+        return "WHERE"
+    
+
+class HavingClauseExpression(PredicateClauseExpression):
+    
+    def clause_symbol(self) -> str:
+        return "HAVING"
+
+
+class QualifyClauseExpression(PredicateClauseExpression):
+    
+    def clause_symbol(self) -> str:
+        return "QUALIFY"
+
+
+class GroupByClauseExpression(ClauseExpression):
+
+    def __init__(self, expressions: List[SelectableExpressionType] | List[int]):
+        pass
+
+class OrderByClauseExpression(ClauseExpression):
+
+    def __init__(self, expression: List[SelectableExpressionType] | List[int]):
+        pass
+
+class LimitClauseExpression(ClauseExpression):
+
+    def __init__(self, limit: int, offset: Optional[int]=None):
+        assert limit > 0 and isinstance(limit, int)
+        if offset is not None:
+            assert offset > 0 and isinstance(offset, int)
+        self.limit = limit
+        self.offset = offset
+
+    def unindented_sql(self) -> str:
+        _offset = "" if self.offset is None else f" OFFSET {self.offset}"
+        return f"LIMIT {self.limit}{_offset}"

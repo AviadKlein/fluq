@@ -258,6 +258,9 @@ class TestExpression(TestCase):
     def test_from_clause_bad_arguments(self):
         self.fail("TODO")
 
+    def test_where_clause(self):
+        self.fail("TODO")
+
 
         
         
