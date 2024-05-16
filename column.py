@@ -49,11 +49,11 @@ class Column:
         return Column(self.expr, value)
     
     @resolve_column_function_type_decorator
-    def equal(self, other: str | int | float | bool | Column) -> Column:
+    def eq(self, other: str | int | float | bool | Column) -> Column:
         return Column(Equal(self.expr, other.expr))
-    
+
     @resolve_column_function_type_decorator
-    def not_equal(self, other: str | int | float | bool | Column) -> Column:
+    def neq(self, other: str | int | float | bool | Column) -> Column:
         return Column(NotEqual(self.expr, other.expr))
     
     @resolve_column_function_type_decorator
