@@ -130,12 +130,4 @@ class TestColumn(TestCase):
         result = functions.current_date()
         self.assertEqual(result.expr.sql, "CURRENT_DATE()")
         
-
-
-
-
-
-
-
-
         

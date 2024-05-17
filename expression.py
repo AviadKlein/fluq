@@ -480,6 +480,8 @@ class JoinOperationExpression(Expression):
         self.right = right
         
         self.left_alias = ValidName(left_alias).name if left_alias is not None else None
+        self.right_alias = ValidName(right_alias).name if right_alias is not None else None
+
         if isinstance(self.left, JoinOperationExpression):
             assert self.left_alias is None, f"JoinOperationExpression can't have an alias"
         if isinstance(self.left, QueryExpression):
@@ -487,8 +489,7 @@ class JoinOperationExpression(Expression):
         if isinstance(self.right, QueryExpression):
             assert self.right_alias is not None, "right QueryExpression must have an alias"
 
-        self.right_alias = ValidName(right_alias).name if right_alias is not None else None
-
+        
         # if both right and left aliases are not None assert they are not the same
         if (self.left_alias is not None) and (self.right_alias is not None):
             if self.left_alias == self.right_alias:
@@ -724,7 +725,6 @@ class SelectClauseExpression(ClauseExpression):
             return arg, None
         elif isinstance(arg, tuple):
             assert len(arg) == 2
-            print(f"{arg=}")
             expr, optional_alias = arg
             if not isinstance(expr, self.allowed_expression_types()):
                 raise TypeError(f"expr type is not supported, got: {type(expr)}, expected: [{self.allowed_expression_types()}]")

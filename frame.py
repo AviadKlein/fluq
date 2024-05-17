@@ -86,6 +86,7 @@ class Frame:
         if self._is_select_all(): # if so, replace it
             return Frame(self._query_expr.copy(select_clause=select_clause))
         else: # otherwise, create a sub query
+            assert self.alias is not None, "when sub selecting, first use an alias"
             sub_query = QueryExpression(
                 from_clause=FromClauseExpression(query=self._query_expr, alias=self.alias),
                 select_clause=select_clause
@@ -154,7 +155,7 @@ class Frame:
         """
         assert isinstance(other, Frame)
         assert isinstance(on, Column)
-        assert isinstance(join_type, str) and join_type in ['inner', 'left', 'right', 'full other']
+        assert isinstance(join_type, str) and join_type in ['inner', 'left', 'right', 'full outer']
 
         if self.alias is None:
             raise TypeError("alias needs to be defined before cartesian join")
@@ -182,7 +183,7 @@ class Frame:
                     left_alias=self.alias, right_alias=other.alias,
                     on=on.expr
                 )
-        select_clause = SelectClauseExpression(ColumnExpression("*"))
+        select_clause = SelectClauseExpression.from_args(ColumnExpression("*"))
         from_clause = FromClauseExpression(join_expression=join_expression)
         query = QueryExpression(from_clause=from_clause, select_clause=select_clause)
         return Frame(queryable_expression=query)
