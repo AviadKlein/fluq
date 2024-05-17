@@ -273,34 +273,41 @@ class LessOrEqual(LogicalOperationExpression):
 class In(LogicalOperationExpression):
 
     def __init__(self, left: Expression, 
-                 *args: Expression | LiteralTypes | FutureExpression):
+                 *args: Expression | LiteralTypes | QueryExpression):
         assert isinstance(left, Expression)
         self.left = left
+        self.is_query = False
 
-        # resolve list of expressions
-        if isinstance(args, tuple):
-            if len(args) == 1 and isinstance(args[0], FutureExpression):
-                self._list = args[0]
-                raise NotImplementedError("yet to implement FutureExpression")
-            elif all([isinstance(_, Expression) for _ in args]):
-                self._list = args
-            elif all([isinstance(_, (int, float)) for _ in args]) or \
-                all([isinstance(_, bool) for _ in args]) or \
-                all([isinstance(_, str) for _ in args]):
-                self._list = [LiteralExpression(_) for _ in args]
-            else:
-                msg = "list of expressions can be Expression | LiteralTypes | FutureExpression"
-                msg += "\n"
-                msg += f"{args} has types: ({[type(_) for _ in args]}), respectively"
-                raise TypeError(msg)
+        # assert only 1 QueryExpression
+        _num_queries = sum([1 for _ in args if isinstance(_, QueryExpression)])
+        assert _num_queries <= 1
+
+        if _num_queries == 1:
+            assert len(args) == 1
+            self.is_query = True
+            self.query = args[0]
+        elif all([isinstance(_, Expression) for _ in args]):
+            self._list = args
+        elif all([isinstance(_, (int, float)) for _ in args]) or \
+            all([isinstance(_, bool) for _ in args]) or \
+            all([isinstance(_, str) for _ in args]):
+            self._list = [LiteralExpression(_) for _ in args]
+        else:
+            msg = "list of expressions can be Expression | LiteralTypes | FutureExpression"
+            msg += "\n"
+            msg += f"{args} has types: ({[type(_) for _ in args]}), respectively"
+            raise TypeError(msg)
 
     @property
     def op_str(self) -> str:
         return "IN"
 
     def unindented_sql(self) -> str:
-        resolved_str = ', '.join([_.sql for _ in self._list])
-        return f"{self.left.unindented_sql()} {self.op_str} ({resolved_str})"
+        if self.is_query:
+            return f"{self.left.unindented_sql()} {self.op_str} ( {self.query.sql} )"
+        else:
+            resolved_str = ', '.join([_.sql for _ in self._list])
+            return f"{self.left.unindented_sql()} {self.op_str} ({resolved_str})"
     
 class Not(NotEqual):
 
@@ -449,13 +456,13 @@ class JoinOperationExpression(Expression):
     """a base class for all relational operations"""
 
     def __init__(self,
-                 left: TableNameExpression | JoinOperationExpression,
-                 right: TableNameExpression,
+                 left: TableNameExpression | QueryExpression | JoinOperationExpression,
+                 right: TableNameExpression | QueryExpression,
                  left_alias: Optional[str]=None,
                  right_alias: Optional[str]=None,
                  on: Optional[LogicalOperationExpression]=None):
-        assert isinstance(left, Expression)
-        assert isinstance(right, Expression)
+        assert isinstance(left, TableNameExpression | QueryExpression | JoinOperationExpression)
+        assert isinstance(right, TableNameExpression | QueryExpression)
         if on is not None:
             assert isinstance(on, LogicalOperationExpression)
 
@@ -465,6 +472,10 @@ class JoinOperationExpression(Expression):
         self.left_alias = ValidName(left_alias).name if left_alias is not None else None
         if isinstance(self.left, JoinOperationExpression):
             assert self.left_alias is None, f"JoinOperationExpression can't have an alias"
+        if isinstance(self.left, QueryExpression):
+            assert self.left_alias is not None, "left QueryExpression must have an alias"
+        if isinstance(self.right, QueryExpression):
+            assert self.right_alias is not None, "right QueryExpression must have an alias"
 
         self.right_alias = ValidName(right_alias).name if right_alias is not None else None
 
@@ -477,7 +488,27 @@ class JoinOperationExpression(Expression):
         duplicates = [item for item, count in Counter(self.aliases()).items() if count > 1]
         if len(duplicates) > 0:
             raise TypeError(f"can't have duplicate aliases for tables, found: {', '.join(duplicates)}")
-
+        
+    @classmethod
+    def from_kwargs(cls, join_type: str, **kwargs) -> JoinOperationExpression:
+        assert 'left' in kwargs
+        assert 'right' in kwargs
+        assert 'left_alias' in kwargs
+        assert 'right_alias' in kwargs
+        assert 'on' in kwargs
+        match join_type:
+            case 'inner':
+                return InnerJoinOperationExpression(**kwargs)
+            case 'left':
+                return LeftJoinOperationExpression(**kwargs)
+            case 'right':
+                return RightJoinOperationExpression(**kwargs)
+            case 'full outer':
+                return FullOuterJoinOperationExpression(**kwargs)
+            case 'cross':
+                return CrossJoinOperationExpression(**kwargs)
+            case _:
+                raise TypeError(f"unknown join_type '{join_type}'")
 
     
     def aliases(self) -> List[str]:
@@ -493,7 +524,6 @@ class JoinOperationExpression(Expression):
         
         return result
 
-
     @abstractmethod
     def operator(self) -> str:
         pass
@@ -501,14 +531,31 @@ class JoinOperationExpression(Expression):
     def on_clause(self) -> str:
         return f" ON {self.on.sql}" if self.on is not None else ""
 
+    def resolve_sql(self, side: str) -> str:
+        match side:
+            case "left":
+                side = self.left
+                alias = self.left_alias
+            case "right":
+                side = self.right
+                alias = self.right_alias
+            case _:
+                raise TypeError()
+        if isinstance(side, TableNameExpression | JoinOperationExpression):
+            result = side.sql
+            if alias is not None:
+                result = f"{result} AS {alias}"
+            return result
+        elif isinstance(side, QueryExpression):
+            return f"({side.sql}) AS {alias}"
+        else:
+            raise TypeError()       
+
     def unindented_sql(self) -> str:
-        left = self.left.sql
-        if self.left_alias is not None:
-            left = f"{left} AS {self.left_alias}"
-        right = self.right.sql
-        if self.right_alias is not None:
-            right = f"{right} AS {self.right_alias}"
+        left = self.resolve_sql("left")
+        right = self.resolve_sql("right")
         return f"{left} {self.operator()} {right}{self.on_clause()}"
+
 
 class InnerJoinOperationExpression(JoinOperationExpression):
     
@@ -562,7 +609,7 @@ SelectableExpressionType = LiteralExpression | ColumnExpression | \
     CaseExpression
 
 
-class SelectExpression(ClauseExpression):
+class SelectClauseExpression(ClauseExpression):
 
     def __init__(self, expressions: List[SelectableExpressionType], aliases: List[Optional[ValidName]]):
         assert len(expressions) == len(aliases)
@@ -576,17 +623,25 @@ class SelectExpression(ClauseExpression):
     @property
     def _has_star(self) -> bool:
         return ColumnExpression("*") in self.expressions
+    
+    def is_select_all(self) -> bool:
+        cond = len(self.expressions) == 1
+        cond &= self._has_star
+        return cond
 
     def _resolve_arg(self, arg: SelectableExpressionType | Tuple[SelectableExpressionType, Optional[ValidName | str]]) -> Tuple[SelectableExpressionType, Optional[ValidName | str]]:
         if not isinstance(arg, tuple):
-            assert isinstance(arg, self.allowed_expression_types())
+            if not isinstance(arg, self.allowed_expression_types()):
+                raise TypeError(f"expr type is not supported, got: {type(arg)}, expected: [{self.allowed_expression_types()}]")
             if arg == ColumnExpression("*"):
                 assert not self._has_star, """can only have 1 ColumnExpression("*")"""
             return arg, None
         elif isinstance(arg, tuple):
             assert len(arg) == 2
+            print(f"{arg=}")
             expr, optional_alias = arg
-            assert isinstance(expr, self.allowed_expression_types())
+            if not isinstance(expr, self.allowed_expression_types()):
+                raise TypeError(f"expr type is not supported, got: {type(expr)}, expected: [{self.allowed_expression_types()}]")
             assert (optional_alias is None) or isinstance(optional_alias, (ValidName | str))
             if optional_alias is None:
                 return self._resolve_arg(expr)
@@ -603,10 +658,10 @@ class SelectExpression(ClauseExpression):
             
 
     
-    def add(self, expression: SelectableExpressionType, alias: Optional[ValidName | str]=None) -> SelectExpression:
+    def add(self, expression: SelectableExpressionType, alias: Optional[ValidName | str]=None) -> SelectClauseExpression:
         expr, optional_alias = self._resolve_arg((expression, alias))
 
-        return SelectExpression(
+        return SelectClauseExpression(
             expressions=[*self.expressions, expr],
             aliases=[*self.aliases, optional_alias]
         )
@@ -622,8 +677,8 @@ class SelectExpression(ClauseExpression):
             CaseExpression])
 
     @classmethod
-    def from_args(cls, *args: Tuple[SelectableExpressionType, Optional[ValidName]]) -> SelectExpression:
-        result = SelectExpression([],[])
+    def from_args(cls, *args: Tuple[SelectableExpressionType, Optional[ValidName]]) -> SelectClauseExpression:
+        result = SelectClauseExpression([],[])
         for arg in args:
             if not isinstance(arg, tuple):
                 result = result.add(arg, None)
@@ -633,6 +688,10 @@ class SelectExpression(ClauseExpression):
             else:
                 raise TypeError(f"Only Tuple[SelectableExpressionType, Optional[ValidName]] are supported as args, got {type(arg)=}")
         return result
+    
+    @classmethod
+    def wildcard(cls) -> SelectClauseExpression:
+        return SelectClauseExpression([ColumnExpression("*")], [None])
 
 
     def unindented_sql(self) -> str:
@@ -664,6 +723,10 @@ class FromClauseExpression(ClauseExpression):
     >>> fc = FromClauseExpression(join_expression=JoinOperationExpression(...))
 
     joining other tables will internally manage a JoinOperationExpression
+
+    with sub-queries:
+    >>> q: QueryAble = ...
+    >>> fc = FromClauseExpression(query=q, alias="t")
     """
     
     def __init__(self, **kwargs) -> None:
@@ -671,7 +734,7 @@ class FromClauseExpression(ClauseExpression):
             case 1:
                 key = list(kwargs.keys())[0]
                 match key:
-                    case 'table' | 'join_expression':
+                    case 'table' | 'join_expression' :
                         item = kwargs[key]
                         assert isinstance(item, str | TableNameExpression | JoinOperationExpression)
                         if isinstance(item, str):
@@ -692,9 +755,15 @@ class FromClauseExpression(ClauseExpression):
                         assert isinstance(alias, str)
                         self._alias = ValidName(alias)
                         self.from_item = table
-                        
+                    case ('query', 'alias'):
+                        query = kwargs[key1]
+                        alias = kwargs[key2]
+                        assert isinstance(query, QueryAble)
+                        assert isinstance(alias, str)
+                        self._alias = ValidName(alias)
+                        self.from_item = query
                     case _:
-                        raise TypeError(f"when calling with 2 key word arguments, only 'table' and 'alias' are supported, got '{key1}' and '{key2}'")
+                        raise TypeError(f"when calling with 2 key word arguments, either ('table', 'alias') or ('query', 'alias') are supported, got '{key1}' and '{key2}'")
             case _:
                 raise TypeError("only supporting kwargs of length 1 or 2")
             
@@ -771,9 +840,15 @@ class FromClauseExpression(ClauseExpression):
         
         return FromClauseExpression(join_expression=join_expression)
     
+    def is_simple(self) -> bool:
+        """a simple from clause point to 1 table only"""
+        return isinstance(self.from_item, TableNameExpression)
+    
     def unindented_sql(self) -> str:
         # resolve item:
         from_item_str = self.from_item.unindented_sql()
+        if isinstance(self.from_item, QueryAble):
+            from_item_str = f"({from_item_str})"
         if self.alias is not None:
             from_item_str = f"{from_item_str} AS {self.alias}"
         return f"FROM {from_item_str}"
@@ -951,3 +1026,100 @@ class LimitClauseExpression(ClauseExpression):
     def unindented_sql(self) -> str:
         _offset = "" if self.offset is None else f" OFFSET {self.offset}"
         return f"LIMIT {self.limit}{_offset}"
+    
+class QueryAble(Expression):
+    
+    @abstractmethod
+    def copy(self):
+        pass
+
+class QueryExpression(QueryAble):
+
+    def __init__(self,
+                 from_clause: Optional[FromClauseExpression]=None,
+                 where_clause: Optional[WhereClauseExpression]=None,
+                 group_by_clause: Optional[GroupByClauseExpression]=None,
+                 select_clause: Optional[SelectClauseExpression]=None,
+                 having_clause: Optional[HavingClauseExpression]=None,
+                 qualify_clause: Optional[QualifyClauseExpression]=None,
+                 order_by_clause: Optional[OrderByClauseExpression]=None,
+                 limit_clause: Optional[LimitClauseExpression]=None):
+        assert isinstance(from_clause, FromClauseExpression) or from_clause is None
+        assert isinstance(where_clause, WhereClauseExpression) or where_clause is None
+        assert isinstance(group_by_clause, GroupByClauseExpression) or group_by_clause is None
+        assert isinstance(select_clause, SelectClauseExpression) or select_clause is None
+        assert isinstance(having_clause, HavingClauseExpression) or having_clause is None
+        assert isinstance(qualify_clause, QualifyClauseExpression) or qualify_clause is None
+        assert isinstance(order_by_clause, OrderByClauseExpression) or order_by_clause is None
+        assert isinstance(limit_clause, LimitClauseExpression) or limit_clause is None
+        self.from_clause = from_clause
+        self.where_clause = where_clause
+        self.group_by_clause = group_by_clause
+        self.select_clause = select_clause
+        self.having_clause = having_clause
+        self.qualify_clause = qualify_clause
+        self.order_by_clause = order_by_clause
+        self.limit_clause = limit_clause
+
+    def copy(self, from_clause: Optional[FromClauseExpression]=None,
+            where_clause: Optional[WhereClauseExpression]=None,
+            group_by_clause: Optional[GroupByClauseExpression]=None,
+            select_clause: Optional[SelectClauseExpression]=None,
+            having_clause: Optional[HavingClauseExpression]=None,
+            qualify_clause: Optional[QualifyClauseExpression]=None,
+            order_by_clause: Optional[OrderByClauseExpression]=None,
+            limit_clause: Optional[LimitClauseExpression]=None) -> QueryExpression:
+        assert isinstance(from_clause, FromClauseExpression) or from_clause is None
+        assert isinstance(where_clause, WhereClauseExpression) or where_clause is None
+        assert isinstance(group_by_clause, GroupByClauseExpression) or group_by_clause is None
+        assert isinstance(select_clause, SelectClauseExpression) or select_clause is None
+        assert isinstance(having_clause, HavingClauseExpression) or having_clause is None
+        assert isinstance(qualify_clause, QualifyClauseExpression) or qualify_clause is None
+        assert isinstance(order_by_clause, OrderByClauseExpression) or order_by_clause is None
+        assert isinstance(limit_clause, LimitClauseExpression) or limit_clause is None
+        return QueryExpression(
+            from_clause = self.from_clause if from_clause is None else from_clause,
+            where_clause = self.where_clause if where_clause is None else where_clause,
+            group_by_clause = self.group_by_clause if group_by_clause is None else group_by_clause,
+            select_clause = self.select_clause if select_clause is None else select_clause,
+            having_clause = self.having_clause if having_clause is None else having_clause,
+            qualify_clause = self.qualify_clause if qualify_clause is None else qualify_clause,
+            limit_clause = self.limit_clause if limit_clause is None else limit_clause
+        )
+
+    def clause_ordering(self) -> List[ClauseExpression]:
+        return [
+            self.select_clause,
+            self.from_clause, 
+            self.where_clause, 
+            self.group_by_clause, 
+            self.having_clause,
+            self.qualify_clause,
+            self.order_by_clause,
+            self.limit_clause]
+    
+    def unindented_sql(self) -> str:
+        return '\n'.join([_.unindented_sql() for _ in self.clause_ordering() if _ is not None])
+    
+    def is_simple(self) -> bool:
+        """a simple query is the following pattern: SELECT * FROM [TABLE]"""
+        cond = [self.select_clause.is_select_all(), 
+                self.from_clause.is_simple(),
+                self.group_by_clause is None,
+                self.where_clause is None,
+                self.having_clause is None,
+                self.qualify_clause is None,
+                self.limit_clause is None,
+                self.order_by_clause is None
+                ]
+        return all(cond)
+    
+
+class UnionQueryExpression(QueryAble):
+
+    def __init__(self, a: QueryExpression, b: QueryExpression):
+        raise NotImplementedError()
+
+    
+
+    

@@ -90,9 +90,6 @@ class TestExpression(TestCase):
         self.assertEqual(float_lit2.sql, "1000000.0")
         self.assertEqual(str_lit.sql, "'hello'")
 
-    def test_table_column_expression(self):
-        self.fail("Not implemented")
-
     def test_logical_and_math_expressions(self):
         zipped = [
             (Equal(LiteralExpression(1), LiteralExpression("a")), "1 = 'a'"),
@@ -124,6 +121,16 @@ class TestExpression(TestCase):
         ]
         for result, expected in zipped:
             self.assertEqual(result.sql, expected)
+
+    def test_in_query_expression(self):
+        query = QueryExpression(
+            from_clause=FromClauseExpression(table="db.schema.table1"),
+            select_clause=SelectClauseExpression([ColumnExpression("id")], [None])
+            )
+        expr = In(ColumnExpression("a"), query)
+        expected = "a IN ( SELECT id\nFROM db.schema.table1 )"
+        self.assertEqual(expr.sql, expected)
+
 
     def test_empty_case_expression(self):
         case = CaseExpression([])
@@ -170,26 +177,26 @@ class TestExpression(TestCase):
 
     def test_join_operation(self):
         
-        inner = InnerJoinOperationExpression(left=AnyExpression("t1"), right=AnyExpression("t2"))
+        inner = InnerJoinOperationExpression(left=TableNameExpression("t1"), right=TableNameExpression("t2"))
         self.assertEqual(inner.sql, "t1 INNER JOIN t2")
 
         inner = InnerJoinOperationExpression(
-            left=AnyExpression("t1"), 
-            right=AnyExpression("t2"),
+            left=TableNameExpression("t1"), 
+            right=TableNameExpression("t2"),
             left_alias="a")
         
         self.assertEqual(inner.sql, "t1 AS a INNER JOIN t2")
 
         left = LeftJoinOperationExpression(
-            left=AnyExpression("t1"), 
-            right=AnyExpression("t2"),
+            left=TableNameExpression("t1"), 
+            right=TableNameExpression("t2"),
             left_alias="a", right_alias="b")
         
         self.assertEqual(left.sql, "t1 AS a LEFT OUTER JOIN t2 AS b")
 
         left_on = LeftJoinOperationExpression(
-            left=AnyExpression("t1"), 
-            right=AnyExpression("t2"),
+            left=TableNameExpression("t1"), 
+            right=TableNameExpression("t2"),
             left_alias="a", right_alias="b", on=Equal(ColumnExpression("a.id"), ColumnExpression("b.id")))
         
         self.assertEqual(left_on.sql, "t1 AS a LEFT OUTER JOIN t2 AS b ON a.id = b.id")
@@ -197,41 +204,51 @@ class TestExpression(TestCase):
     def test_join_nested(self):
 
         first = InnerJoinOperationExpression(
-            left=AnyExpression("t1"), 
-            right=AnyExpression("t2"),
+            left=TableNameExpression("t1"), 
+            right=TableNameExpression("t2"),
             on=Equal(ColumnExpression("t1.id"), ColumnExpression("t2.id")))
         
         nested = InnerJoinOperationExpression(
             left=first,
-            right=AnyExpression("t3"),
+            right=TableNameExpression("t3"),
             on=Equal(ColumnExpression("t3.id"), ColumnExpression("t2.id")))
         
 
         self.assertEqual(nested.sql, "t1 INNER JOIN t2 ON t1.id = t2.id INNER JOIN t3 ON t3.id = t2.id")
 
+    def test_join_subquery(self):
+        query = QueryExpression(
+            from_clause=FromClauseExpression(table="db.schema.table1"),
+            select_clause=SelectClauseExpression([ColumnExpression("a"), ColumnExpression("b")], [None, None])
+            )
+        inner = InnerJoinOperationExpression(left=query, right=TableNameExpression("t2"), left_alias="A", 
+                                             on=Equal(ColumnExpression("A.a"), ColumnExpression("t2.a")))
+        expected = "(SELECT a, b\nFROM db.schema.table1) AS A INNER JOIN t2 ON A.a = t2.a"
+        self.assertEqual(inner.sql, expected)
+
     def test_cross_join_no_on_clause(self):
 
         cross = CrossJoinOperationExpression(
-            left=AnyExpression("t1"), 
-            right=AnyExpression("t2"),
+            left=TableNameExpression("t1"), 
+            right=TableNameExpression("t2"),
             left_alias="A", right_alias="B"
         )
 
         self.assertEqual(cross.sql, "t1 AS A CROSS JOIN t2 AS B")
     
     def test_select_clause(self):
-        select = SelectExpression.from_args(ColumnExpression("*"))
+        select = SelectClauseExpression.from_args(ColumnExpression("*"))
         self.assertEqual(select.sql, "SELECT *")
 
         select = select.add(ColumnExpression("t1"), "a")
         self.assertEqual(select.sql, "SELECT *, t1 AS a")
    
         with self.assertRaises(AssertionError) as cm:
-            SelectExpression.from_args((ColumnExpression("*"), "A"))
+            SelectClauseExpression.from_args((ColumnExpression("*"), "A"))
         self.assertEqual(str(cm.exception), """ColumnExpression("*") can't have an alias, got 'A'""")
 
         with self.assertRaises(AssertionError) as cm:
-             select = SelectExpression.from_args(ColumnExpression("*"))
+             select = SelectClauseExpression.from_args(ColumnExpression("*"))
              select.add(ColumnExpression("*"))
         self.assertEqual(str(cm.exception), """can only have 1 ColumnExpression("*")""")
 
@@ -276,6 +293,20 @@ class TestExpression(TestCase):
             )
         self.assertTrue("can't have duplicate aliases for tables, found: " in str(cm.exception))
 
+    def test_from_clause_sub_query(self):
+        query = QueryExpression(
+            from_clause=FromClauseExpression(table="db.schema.table1"),
+            select_clause=SelectClauseExpression([ColumnExpression("a"), ColumnExpression("b")], [None, None])
+            )
+        # fails when there's no alias
+        with self.assertRaises(TypeError) as cm:
+            FromClauseExpression(query=query)
+        self.assertEqual(str(cm.exception), "when calling with 1 key word argument, only 'table' and 'join_expression' are supported, got 'query'")
+
+        fc = FromClauseExpression(query=query, alias="A")
+        expected = "FROM (SELECT a, b\nFROM db.schema.table1) AS A"
+        self.assertEqual(expected, fc.sql)
+
 
     def test_from_clause_bad_arguments(self):
         # 1 argument
@@ -286,7 +317,7 @@ class TestExpression(TestCase):
         # 2 arguments
         with self.assertRaises(TypeError) as cm:
             FromClauseExpression(table="foo", join_expression="bar")
-        self.assertEqual("when calling with 2 key word arguments, only 'table' and 'alias' are supported, got 'table' and 'join_expression'", str(cm.exception))
+        self.assertEqual("when calling with 2 key word arguments, either ('table', 'alias') or ('query', 'alias') are supported, got 'table' and 'join_expression'", str(cm.exception))
 
     def test_predicate_clause(self):
         where = WhereClauseExpression(Equal(ColumnExpression("t1.id"), ColumnExpression("t2.id")))
@@ -379,6 +410,14 @@ class TestExpression(TestCase):
         lc2 = LimitClauseExpression(100, 50)
         self.assertEqual(lc1.sql, "LIMIT 100")
         self.assertEqual(lc2.sql, "LIMIT 100 OFFSET 50")
+
+    def test_query_expression(self):
+        query = QueryExpression(
+            from_clause=FromClauseExpression(table="db.schema.table1"),
+            select_clause=SelectClauseExpression([ColumnExpression("a"), ColumnExpression("b")], [None, None])
+            )
+        expected = """SELECT a, b\nFROM db.schema.table1"""
+        self.assertEqual(query.sql, expected)
 
 
 
