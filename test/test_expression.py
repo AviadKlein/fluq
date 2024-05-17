@@ -419,6 +419,14 @@ class TestExpression(TestCase):
         expected = """SELECT a, b\nFROM db.schema.table1"""
         self.assertEqual(query.sql, expected)
 
+    def test_dynamic_functions(self):
+        functions = SQLFunctionExpressions()
+
+        self.assertTrue('FunctionExpressionMOD' in functions.__dir__())
+
+        result = functions.FunctionExpressionMOD(X=LiteralExpression(5), Y=LiteralExpression(3))
+        self.assertEqual(result.sql, "MOD(5, 3)")
+
 
 
         

@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from typing import Any, List, Tuple, Optional
+from typing import Any, List, Tuple, Optional, Dict
 from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
@@ -101,13 +101,21 @@ class AnyExpression(Expression):
 
     def unindented_sql(self) -> str:
         return self.expr
-        
+    
     
 
-class FutureExpression(Expression):
-    """this is a place holder for until I solve the issue of subqueries used in the logical:
-    col IN (select from ...)"""
-    
+class TableNameExpression(Expression):
+
+    def __init__(self, db_path: ValidName | str):
+        assert isinstance(db_path, ValidName | str), f"only supported ValidName | str, got {type(db_path)=}"
+        if isinstance(db_path, str):
+            db_path = ValidName(db_path)
+        self.db_path = db_path
+
+    def unindented_sql(self) -> str:
+        return self.db_path.name
+
+
 
 class ToLogicalMixin(Expression):
     """a mixin to turn a logical or math or just a pointer or literal into a logical expression"""
@@ -131,19 +139,6 @@ class ColumnExpression(ToLogicalMixin):
     
     def unindented_sql(self) -> str:
         return self.name
-    
-
-class TableNameExpression(Expression):
-
-    def __init__(self, db_path: ValidName | str):
-        assert isinstance(db_path, ValidName | str), f"only supported ValidName | str, got {type(db_path)=}"
-        if isinstance(db_path, str):
-            db_path = ValidName(db_path)
-        self.db_path = db_path
-
-    def unindented_sql(self) -> str:
-        return self.db_path.name
-        
 
 
 LiteralTypes = int | float | bool | str
@@ -166,6 +161,16 @@ class LiteralExpression(ToLogicalMixin):
 
     def unindented_sql(self) -> str:
         return self.sql_value
+    
+class NegatedExpression(ToLogicalMixin):
+    """negate an expression"""
+
+    def __init__(self, expr: Expression) -> None:
+        assert isinstance(expr, Expression)
+        self.expr = expr
+
+    def unindented_sql(self) -> str:
+        return f"-{self.expr.unindented_sql()}"
 
 
 class NullExpression(ToLogicalMixin):
@@ -435,20 +440,25 @@ class CaseExpression(Expression):
         return CaseExpression(self.cases, otherwise)
 
     @classmethod
-    def _case_to_sql(cls, operation: Expression, expr: Expression, indent: Indent) -> str:
-        return f"{indent}WHEN {operation.unindented_sql()} THEN {expr.unindented_sql()}"
+    def _case_to_sql(cls, operation: Expression, expr: Expression) -> str:
+        return f"WHEN {operation.unindented_sql()} THEN {expr.unindented_sql()}"
+    
+    def cases_unindented_sql(self) -> List[str]:
+        cases = [self._case_to_sql(operation, expr) for operation, expr in self.cases]
+        otherwise = [] if self.otherwise is None else [f"ELSE {self.otherwise.unindented_sql()}"]
+        return cases + otherwise
     
     def unindented_sql(self) -> str:
         return self.sql(indent = Indent())
-    
+        
     @property
     def sql(self, indent: Indent = Indent()) -> str:
         if len(self.cases) == 0:
             raise ValueError("can't render to sql with 0 cases")
-        cases = [self._case_to_sql(operation, expr, indent.plus1()) for operation, expr in self.cases]
+        cases = self.cases_unindented_sql()
+        cases = [f"{indent.plus1()}{case}" for case in cases]
         cases = '\n'.join(cases)
-        otherwise = "" if self.otherwise is None else f"\n{indent.plus1()}ELSE {self.otherwise.unindented_sql()}"
-        return f"{indent}CASE\n{cases}{otherwise}\n{indent}END"
+        return f"{indent}CASE\n{cases}\n{indent}END"
     
 
 
@@ -594,8 +604,84 @@ class CrossJoinOperationExpression(JoinOperationExpression):
     
 # Functions
 class AbstractFunctionExpression(Expression):
-    """abstract method to hold all functions"""
-    pass
+    """abstract method to hold all function expressions
+
+    functions, as expressions, are just a symbol and a list of named arguments
+    all functions are created dynamically and are stored within SQLFunctions
+
+    the naming convention is to use the 'symbol' method as the name for the function
+    """
+    
+    @abstractmethod
+    def arguments_by_order(self) -> List[str]:
+        pass
+
+    @abstractmethod
+    def symbol(self) -> str:
+        pass
+
+    def validate_arguments(self, **kwargs) -> Dict[str, Expression]:
+        expected_args = self.arguments_by_order()
+        keys = list(kwargs.keys())
+
+        cond = len(keys) == len(expected_args)
+        cond &= all([e==a for e,a in zip(expected_args, keys)])
+        if not cond:
+            unrecognized_args = []
+            bad_values = {}
+            
+            missing_args = [_ for _ in expected_args if _ not in keys]
+            for key, value in kwargs:
+                if key not in expected_args:
+                    unrecognized_args.append(key)
+                if not isinstance(value, Expression):
+                    bad_values[key] = value
+
+            if len(unrecognized_args) > 0:
+                raise TypeError(f"function {self.symbol()} got unrecognized args: {unrecognized_args}")
+            if len(missing_args) > 0:
+                raise TypeError(f"function {self.symbol()} is missing args: {missing_args}")
+            if len(bad_values) > 0:
+                raise TypeError(f"function {self.symbol()} expects Expression as values, got {[(k, type(v)) for k,v in bad_values]}")
+        else:
+            return kwargs
+
+    def __init__(self, **kwargs) -> None:
+        self.kwargs = self.validate_arguments(**kwargs)
+        
+    def unindented_sql(self) -> str:
+        return f"{self.symbol()}({', '.join([_.sql for _ in self.kwargs.values()])})"
+    
+
+class SQLFunctionExpressions:
+
+    @classmethod
+    def _params(cls):
+        return [
+            ("MOD", ["X", "Y"]),
+            ("FLOOR", ["X"]),
+            ("CURRENT_DATE", [])
+        ]
+    
+    @classmethod
+    def create_concrete_expression_class(cls, symbol: str, arguments: List[str]):
+
+        def symbol_creator(self):
+            return symbol
+        
+        def arguments_creator(self):
+            return arguments
+        
+        return type(
+            symbol, 
+            (AbstractFunctionExpression, ), 
+            {'symbol': symbol_creator, 'arguments_by_order': arguments_creator}
+            )
+
+    def __init__(self) -> None:
+        for symbol, arguments in self._params():
+            setattr(self, f"FunctionExpression{symbol}", self.create_concrete_expression_class(symbol, arguments))
+        
         
 
 # Clauses
