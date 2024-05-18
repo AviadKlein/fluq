@@ -34,7 +34,7 @@ class Frame:
         return Frame(self._query_expr, alias)
     
     @property
-    def alias(self) -> str:
+    def alias(self) -> Optional[str]:
         return self._alias.name if self._alias is not None else None
     
     @alias.setter
@@ -46,6 +46,32 @@ class Frame:
             return self._query_expr.select_clause.is_select_all()
         else:
             raise NotImplementedError()
+        
+    def __call__(self, col: str) -> Column:
+        """an api into columns of the Frame
+        
+        Arguments:
+            col: str - a valid column name
+
+        Usage:
+            >>> payments = table("db.schema.payments")
+            >>> id: Column = payments("id")
+
+            if the Frame has an alias, it too will be passed to the Column identifer
+            >>> payments = table("db.schema.payments").as_("p")
+            >>> id: Column = payments("id")
+            >>> print(id.alias)
+                p
+
+            >>> payments = table("db.schema.payments")
+            >>> query = payments.group_by(payments("id")).agg(sum("value"))
+            >>> print(query.sql)
+                SELECT id, SUM(value)
+                FROM db.schema.payments
+                GROUP BY id
+        """
+        identifier = col if self.alias is None else f"{self.alias}.{col}"
+        return Column(expression=ColumnExpression(identifier), alias=None)
     
     def select(self, *args: str | Column) -> Frame:
         """Select columns
@@ -240,20 +266,11 @@ class Frame:
     def cross_join(self, other: Frame) -> Frame:
         return self.cartesian(other)
 
-    def group_by(self, *args: str | Column | int) -> GroupByFrame:
-        # args = list()
-        # all_str = all([isinstance(_, str) for _ in args])
-        # all_col = all([isinstance(_, Column) for _ in args])
-        # all_int = all([isinstance(_, int) for _ in args])
-        # if not (all_str or all_col or all_int):
-        #     raise TypeError("args need to be either all str, all Column or all int")
-        # if all_col:
-        #     args = [_.expr for _ in args]
-        # if all_str:
-        #     args = [ColumnExpression(_) for _ in args]
-
-        # group_by_clause = GroupByClauseExpression(*args)
-        raise NotImplementedError()
+    def group_by(self, *cols: Column) -> GroupByFrame:
+        return GroupByFrame(
+            query=self._query_expr, 
+            alias=self.alias, 
+            grouping_items=list(cols))
    
     def with_column(self, alias: str, col: Column) -> Frame:
         """
@@ -299,13 +316,85 @@ class Frame:
     
 class GroupByFrame:
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self, query: QueryExpression, alias: Optional[str], grouping_items: List[Column]):
+        # type checks
+        if not isinstance(query, QueryExpression):
+            raise TypeError(f"query must be QueryExpression, got {type(query)=}")
+        
+        if not all([isinstance(_, Column) for _ in grouping_items]):
+            raise TypeError("GroupByFrame only supports Column(s)")
 
-    def agg(self, *args) -> Frame:
-        raise NotImplementedError()
+        # resolve expressions and aliases
+        self.query = query
+        self.alias = alias
+        self.group_by_expr = [_.expr for _ in grouping_items]
+        self.group_by_aliases = [_.alias for _ in grouping_items]
+    
+    def _resolve_expressions_and_aliases(self, *cols: Column) -> List[Tuple[Expression, Optional[str]]]:
+        """returns a list of tuples
+        the first elements in the list are the group by expr and their optional aliases
+        the last elements in the list are the agg exper and their optional aliases
+        """
+        cols = list(cols)
+        if len(cols) == 0:
+            raise TypeError("args can't be empty")
+        if not all([isinstance(_, Column) for _ in cols]):
+            raise TypeError("only Column type is allowed in GroupByFrame.agg")
+        # concat group_by_expr, agg_expr and their aliases
+        select_expr = [_.expr for _ in cols]
+        select_aliases = [_.alias for _ in cols]
+        return list(zip(self.group_by_expr, self.group_by_aliases)) + list(zip(select_expr, select_aliases))
+
+    
+    def agg(self, *cols: Column) -> Frame:
+        zipped = self._resolve_expressions_and_aliases(*cols)
+        
+        select_clause = SelectClauseExpression.from_args(*zipped)
+        group_by_clause = GroupByClauseExpression(*self.group_by_expr)
+
+        match self.query:
+            case QueryExpression(None, _, _, _, _, _, _):
+                raise SyntaxError("can't group by a QueryExpression that has no From clause, use the table method to create a Frame first")
+            case QueryExpression() if self.query.is_simple():
+                new_query = QueryExpression(
+                    from_clause=self.query.from_clause, 
+                    select_clause=select_clause,
+                    group_by_clause=group_by_clause)
+            case _:
+                if self.alias is None:
+                    raise SyntaxError("frame requires an alias before group_by")
+                new_query = QueryExpression(
+                    from_clause=FromClauseExpression(query=self.query, alias=self.alias),
+                    select_clause=select_clause,
+                    group_by_clause=group_by_clause
+                )
+        return Frame(queryable_expression=new_query)
+
+
+        
+
 
 def table(db_path: str) -> Frame:
+    """create a Frame from a pointer to a physical table
+    
+    this is the most recommended way to initialize a Frame object, 
+    as using the Expression api a much harder approach
+    
+    Arguments:
+        db_path: str - the physical name of the table (is checked by ValidName)
+
+    Examples:
+        >>> clients = table("db.schema.clients").as_("c")
+        >>> payments = table("db.schema.payments").as_("p")
+        >>> query = ( 
+            clients.join(payments, on=col("c.id") == col("p.client_id"), join_type='left')
+                .select("c.id", "p.transaction_time", "p.transaction_value")
+            )
+        >>> print(query.sql)
+            SELECT c.id, p.transaction_time, p.transaction_value
+            FROM db.schema.clients AS c LEFT OUTER JOIN db.schema.payments as p ON c.id = p.client_id
+    
+    """
     from_clause = FromClauseExpression(table=TableNameExpression(db_path))
     select_clause = SelectClauseExpression.from_args(ColumnExpression("*"))
     query = QueryExpression(from_clause=from_clause, select_clause=select_clause)

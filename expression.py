@@ -624,6 +624,10 @@ class AbstractFunctionExpression(Expression):
     def symbol(self) -> str:
         pass
 
+    @abstractmethod
+    def is_aggregate(self) -> bool:
+        pass
+
     def validate_arguments(self, **kwargs) -> Dict[str, Expression]:
         expected_args = self.arguments_by_order()
         keys = list(kwargs.keys())
@@ -662,13 +666,19 @@ class SQLFunctionExpressions:
     @classmethod
     def _params(cls):
         return [
-            ("MOD", ["X", "Y"]),
-            ("FLOOR", ["X"]),
-            ("CURRENT_DATE", [])
+            ("MOD", ["X", "Y"], False),
+            ("FLOOR", ["X"], False),
+            ("CURRENT_DATE", [], False),
+            ("SUM", ["X"], True),
+            ("COUNT", ["X"], True),
+            ("MAX", ["X"], True),
+            ("MIN", ["X"], True),
+            ("AVG", ["X"], True),
+            ("ANY_VALUE", ["X"], True),
         ]
     
     @classmethod
-    def create_concrete_expression_class(cls, symbol: str, arguments: List[str]):
+    def create_concrete_expression_class(cls, symbol: str, arguments: List[str], is_aggregate: bool):
 
         def symbol_creator(self):
             return symbol
@@ -676,15 +686,21 @@ class SQLFunctionExpressions:
         def arguments_creator(self):
             return arguments
         
+        def is_aggregate_creator(self):
+            return is_aggregate
+        
         return type(
             symbol, 
             (AbstractFunctionExpression, ), 
-            {'symbol': symbol_creator, 'arguments_by_order': arguments_creator}
+            {
+                'symbol': symbol_creator, 
+                'arguments_by_order': arguments_creator,
+                'is_aggregate': is_aggregate_creator}
             )
 
     def __init__(self) -> None:
-        for symbol, arguments in self._params():
-            setattr(self, f"FunctionExpression{symbol}", self.create_concrete_expression_class(symbol, arguments))
+        for symbol, arguments, is_aggregate in self._params():
+            setattr(self, f"FunctionExpression{symbol}", self.create_concrete_expression_class(symbol, arguments, is_aggregate))
         
         
 
@@ -763,7 +779,8 @@ class SelectClauseExpression(ClauseExpression):
             NullExpression, 
             LogicalOperationExpression, 
             MathOperationExpression, 
-            CaseExpression])
+            CaseExpression,
+            AbstractFunctionExpression])
 
     @classmethod
     def from_args(cls, *args: Tuple[SelectableExpressionType, Optional[ValidName]]) -> SelectClauseExpression:
@@ -1021,7 +1038,8 @@ class GroupByClauseExpression(ClauseExpression):
             NullExpression, 
             LogicalOperationExpression, 
             MathOperationExpression, 
-            CaseExpression])
+            CaseExpression,
+            AbstractFunctionExpression])
     
     def unindented_sql(self) -> str:
         gi_str = [str(_) for _ in self._positionals] if self.is_positional \
@@ -1122,35 +1140,30 @@ class QueryAble(Expression):
     def copy(self):
         pass
 
+@dataclass
 class QueryExpression(QueryAble):
+    from_clause: Optional[FromClauseExpression]=None
+    where_clause: Optional[WhereClauseExpression]=None
+    group_by_clause: Optional[GroupByClauseExpression]=None
+    select_clause: Optional[SelectClauseExpression]=None
+    having_clause: Optional[HavingClauseExpression]=None
+    qualify_clause: Optional[QualifyClauseExpression]=None
+    order_by_clause: Optional[OrderByClauseExpression]=None
+    limit_clause: Optional[LimitClauseExpression]=None
 
-    def __init__(self,
-                 from_clause: Optional[FromClauseExpression]=None,
-                 where_clause: Optional[WhereClauseExpression]=None,
-                 group_by_clause: Optional[GroupByClauseExpression]=None,
-                 select_clause: Optional[SelectClauseExpression]=None,
-                 having_clause: Optional[HavingClauseExpression]=None,
-                 qualify_clause: Optional[QualifyClauseExpression]=None,
-                 order_by_clause: Optional[OrderByClauseExpression]=None,
-                 limit_clause: Optional[LimitClauseExpression]=None):
-        assert isinstance(from_clause, FromClauseExpression) or from_clause is None
-        assert isinstance(where_clause, WhereClauseExpression) or where_clause is None
-        assert isinstance(group_by_clause, GroupByClauseExpression) or group_by_clause is None
-        assert isinstance(select_clause, SelectClauseExpression) or select_clause is None
-        assert isinstance(having_clause, HavingClauseExpression) or having_clause is None
-        assert isinstance(qualify_clause, QualifyClauseExpression) or qualify_clause is None
-        assert isinstance(order_by_clause, OrderByClauseExpression) or order_by_clause is None
-        assert isinstance(limit_clause, LimitClauseExpression) or limit_clause is None
-        self.from_clause = from_clause
-        self.where_clause = where_clause
-        self.group_by_clause = group_by_clause
-        self.select_clause = select_clause
-        self.having_clause = having_clause
-        self.qualify_clause = qualify_clause
-        self.order_by_clause = order_by_clause
-        self.limit_clause = limit_clause
+    def __post_init__(self):
+        assert isinstance(self.from_clause, FromClauseExpression) or self.from_clause is None
+        assert isinstance(self.where_clause, WhereClauseExpression) or self.where_clause is None
+        assert isinstance(self.group_by_clause, GroupByClauseExpression) or self.group_by_clause is None
+        assert isinstance(self.select_clause, SelectClauseExpression) or self.select_clause is None
+        assert isinstance(self.having_clause, HavingClauseExpression) or self.having_clause is None
+        assert isinstance(self.qualify_clause, QualifyClauseExpression) or self.qualify_clause is None
+        assert isinstance(self.order_by_clause, OrderByClauseExpression) or self.order_by_clause is None
+        assert isinstance(self.limit_clause, LimitClauseExpression) or self.limit_clause is None
 
-    def copy(self, from_clause: Optional[FromClauseExpression]=None,
+
+    def copy(self, 
+            from_clause: Optional[FromClauseExpression]=None,
             where_clause: Optional[WhereClauseExpression]=None,
             group_by_clause: Optional[GroupByClauseExpression]=None,
             select_clause: Optional[SelectClauseExpression]=None,
@@ -1158,14 +1171,6 @@ class QueryExpression(QueryAble):
             qualify_clause: Optional[QualifyClauseExpression]=None,
             order_by_clause: Optional[OrderByClauseExpression]=None,
             limit_clause: Optional[LimitClauseExpression]=None) -> QueryExpression:
-        assert isinstance(from_clause, FromClauseExpression) or from_clause is None
-        assert isinstance(where_clause, WhereClauseExpression) or where_clause is None
-        assert isinstance(group_by_clause, GroupByClauseExpression) or group_by_clause is None
-        assert isinstance(select_clause, SelectClauseExpression) or select_clause is None
-        assert isinstance(having_clause, HavingClauseExpression) or having_clause is None
-        assert isinstance(qualify_clause, QualifyClauseExpression) or qualify_clause is None
-        assert isinstance(order_by_clause, OrderByClauseExpression) or order_by_clause is None
-        assert isinstance(limit_clause, LimitClauseExpression) or limit_clause is None
         return QueryExpression(
             from_clause = self.from_clause if from_clause is None else from_clause,
             where_clause = self.where_clause if where_clause is None else where_clause,
@@ -1173,6 +1178,7 @@ class QueryExpression(QueryAble):
             select_clause = self.select_clause if select_clause is None else select_clause,
             having_clause = self.having_clause if having_clause is None else having_clause,
             qualify_clause = self.qualify_clause if qualify_clause is None else qualify_clause,
+            order_by_clause = self.order_by_clause if order_by_clause is None else order_by_clause,
             limit_clause = self.limit_clause if limit_clause is None else limit_clause
         )
 

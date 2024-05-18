@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, List
 
 from expression import Expression, CaseExpression, ColumnExpression, \
     LiteralExpression, AbstractFunctionExpression, SQLFunctionExpressions
@@ -33,7 +33,7 @@ def when(condition: Column, value: Any) -> Column:
 
 class SQLFunctions:
     
-    def create_dynamic_method(self, symbol: str, arguments):
+    def create_dynamic_method(self, symbol: str, arguments: List[str]):
         
         def f(*inputs: int | float | str | bool | Column) -> Column:
             inputs = list(inputs)
@@ -48,7 +48,7 @@ class SQLFunctions:
 
     def __init__(self, set_global: bool=False):
         self.function_expressions = SQLFunctionExpressions()
-        for symbol, arguments in self.function_expressions._params():
+        for symbol, arguments, _ in self.function_expressions._params():
             f = self.create_dynamic_method(symbol, arguments)
             if set_global:
                 import __main__

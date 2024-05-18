@@ -1,13 +1,24 @@
 from unittest import TestCase
 
 from frame import *
-from sql import lit, col
+from sql import lit, col, functions
 
 class TestFrame(TestCase):
     
     def test_table_construction_method(self):
         frame = table("a")
         self.assertEqual(frame.sql, """SELECT *\nFROM a""")
+
+    def test_call_method(self):
+        frame = table("a")
+        col = frame("id")
+        self.assertTrue(isinstance(col, Column))
+        self.assertEqual(col.expr.sql, "id")
+
+        frame = table("a").as_("t1")
+        col = frame("id")
+        self.assertTrue(isinstance(col, Column))
+        self.assertEqual(col.expr.sql, "t1.id")
         
     def test_copy_doc(self):
         self.assertEqual(table("a").filter.__doc__.split('\n')[0], "An alias for 'where'")
@@ -147,7 +158,19 @@ class TestFrame(TestCase):
         
 
     def test_group_by(self):
-        self.fail("Not Implemented")
+         result = (
+             table("db.schema.payments").as_("t1")
+             .group_by(col("customer_id"), col("date"))
+             .agg(functions.sum(col("value").as_("total_value")))
+         )
+         print(result.sql.split('\n'))
+         expected = [
+             'SELECT customer_id, date, SUM(value) AS total_value', 
+             'FROM db.schema.payments', 
+             'GROUP BY customer_id, date']
+         self.assertListEqual(result.sql.split('\n'), expected)
+
+
 
         
 
