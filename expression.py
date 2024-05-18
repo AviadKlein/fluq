@@ -506,15 +506,18 @@ class JoinOperationExpression(Expression):
         assert 'right' in kwargs
         assert 'left_alias' in kwargs
         assert 'right_alias' in kwargs
-        assert 'on' in kwargs
         match join_type:
             case 'inner':
+                assert 'on' in kwargs
                 return InnerJoinOperationExpression(**kwargs)
             case 'left':
+                assert 'on' in kwargs
                 return LeftJoinOperationExpression(**kwargs)
             case 'right':
+                assert 'on' in kwargs
                 return RightJoinOperationExpression(**kwargs)
             case 'full outer':
+                assert 'on' in kwargs
                 return FullOuterJoinOperationExpression(**kwargs)
             case 'cross':
                 return CrossJoinOperationExpression(**kwargs)

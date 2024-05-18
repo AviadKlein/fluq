@@ -134,7 +134,18 @@ class TestFrame(TestCase):
         result = left.sql.split('\n')
         self.assertListEqual(result, expected)
         
-    
+    def test_join_cartesian(self):
+        t1 = table("db.schema.table1").as_("t1")
+        t2 = table("db.schema.table2").as_("t2")
+        result = t1.cartesian(t2)
+        expected = ['SELECT *', 'FROM db.schema.table1 AS t1 CROSS JOIN db.schema.table2 AS t2']
+        self.assertEqual(result.sql.split('\n'), expected)
+
+        result = t1.cartesian(t2).select("t1.id", "t2.id")
+        expected = ['SELECT t1.id, t2.id', 'FROM db.schema.table1 AS t1 CROSS JOIN db.schema.table2 AS t2']
+        self.assertEqual(result.sql.split('\n'), expected)
+        
+
     def test_group_by(self):
         self.fail("Not Implemented")
 

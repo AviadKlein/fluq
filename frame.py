@@ -231,10 +231,14 @@ class Frame:
                     join_type='cross', left=self._query_expr, right=other._query_expr,
                     left_alias=self.alias, right_alias=other.alias
                 )
-        select_clause = SelectClauseExpression(ColumnExpression("*"))
+        select_clause = SelectClauseExpression.wildcard()
         from_clause = FromClauseExpression(join_expression=join_expression)
         query = QueryExpression(from_clause=from_clause, select_clause=select_clause)
         return Frame(queryable_expression=query)
+    
+    @copy_doc(cartesian, preamble="An alias for 'cartesian'")
+    def cross_join(self, other: Frame) -> Frame:
+        return self.cartesian(other)
 
     def group_by(self, *args: str | Column | int) -> GroupByFrame:
         # args = list()
