@@ -67,6 +67,10 @@ class Indent:
         return Indent(self.indents+1, self.indent_str)
 
 
+# TODO - refactor expressions as dataclass wherever possible
+# TODO - add a depth int to all expressions for more sophisticated rendering 
+    # Rendering should be controlled by a Style object, that has a default.
+
 # Expressions
 class Expression(ABC):
     """This is the basic workhorse
@@ -459,7 +463,15 @@ class CaseExpression(Expression):
         cases = [f"{indent.plus1()}{case}" for case in cases]
         cases = '\n'.join(cases)
         return f"{indent}CASE\n{cases}\n{indent}END"
-    
+
+
+@dataclass
+class AnalyticFunctionExpression(Expression):
+    expr: SelectableExpressionType
+    window_spec_expr: WindowSpecExpression
+
+    def unindented_sql(self) -> str:
+        return f"{self.expr.unindented_sql()} OVER({self.window_spec_expr.unindented_sql()})"
 
 
 class JoinOperationExpression(Expression):
@@ -650,7 +662,7 @@ class AbstractFunctionExpression(Expression):
             if len(missing_args) > 0:
                 raise TypeError(f"function {self.symbol()} is missing args: {missing_args}")
             if len(bad_values) > 0:
-                raise TypeError(f"function {self.symbol()} expects Expression as values, got {[(k, type(v)) for k,v in bad_values]}")
+                raise TypeError(f"function {self.symbol()} expects Expression as values, got {[(k, type(v)) for k, v in bad_values]}")
         else:
             return kwargs
 
@@ -658,7 +670,8 @@ class AbstractFunctionExpression(Expression):
         self.kwargs = self.validate_arguments(**kwargs)
         
     def unindented_sql(self) -> str:
-        return f"{self.symbol()}({', '.join([_.sql for _ in self.kwargs.values()])})"
+        args: str = ', '.join([_.sql for _ in self.kwargs.values()])
+        return f"{self.symbol()}({args})"
     
 
 class SQLFunctionExpressions:
@@ -701,8 +714,8 @@ class SQLFunctionExpressions:
     def __init__(self) -> None:
         for symbol, arguments, is_aggregate in self._params():
             setattr(self, f"FunctionExpression{symbol}", self.create_concrete_expression_class(symbol, arguments, is_aggregate))
-        
-        
+    
+       
 
 # Clauses
 class ClauseExpression(Expression):
@@ -780,7 +793,8 @@ class SelectClauseExpression(ClauseExpression):
             LogicalOperationExpression, 
             MathOperationExpression, 
             CaseExpression,
-            AbstractFunctionExpression])
+            AbstractFunctionExpression,
+            AnalyticFunctionExpression])
 
     @classmethod
     def from_args(cls, *args: Tuple[SelectableExpressionType, Optional[ValidName]]) -> SelectClauseExpression:
@@ -1047,13 +1061,14 @@ class GroupByClauseExpression(ClauseExpression):
         gi_str = ', '.join(gi_str)
         return f"GROUP BY {gi_str}"
 
+@dataclass
 class OrderBySpecExpression(Expression):
-
-    def __init__(self, asc: bool=True, nulls: str="FIRST"):
-        assert isinstance(asc, bool)
-        assert isinstance(nulls, str) and nulls in ("FIRST", "LAST")
-        self.asc = asc
-        self.nulls = nulls
+    asc: bool=True
+    nulls: str="FIRST"
+    
+    def __post_init__(self):
+        assert isinstance(self.asc, bool)
+        assert isinstance(self.nulls, str) and self.nulls in ("FIRST", "LAST")
 
     def unindented_sql(self) -> str:
         result = "ASC" if self.asc else "DESC"
@@ -1214,7 +1229,130 @@ class UnionQueryExpression(QueryAble):
 
     def __init__(self, a: QueryExpression, b: QueryExpression):
         raise NotImplementedError()
-
     
+# Specs
 
+@dataclass
+class WindowFrameExpression(Expression):
+    """Window frames
     
+    Source:
+        https://cloud.google.com/bigquery/docs/reference/standard-sql/window-function-calls#def_window_frame
+    
+    A window frame can be either rows or range
+    Both require an order by spec in the WindowSpec
+    If range is selected, only 1 expression can be included in the order_by spec
+    and it must be numeric (not inforced by this package)
+
+    If start is UNBOUNDED PRECEDING then end can be either:
+        X PRECEDING, CURRENT ROW, Z FOLLOWING, UNBOUNDED FOLLOWING
+    If start is Y PRECEDING then end can be either:
+        X PRECEDING, CURRENT ROW, Z FOLLOWING, UNBOUNDED FOLLOWING
+        such that Y > X
+    If start is CURRENT ROW then end can be either:
+        CURRENT ROW, Z FOLLOWING, UNBOUNDED FOLLOWING
+    If start is X FOLLOWING then end can be either:
+        Z FOLLOWING, UNBOUNDED FOLLOWING
+        such that Z > X
+
+    To implement this logic, we will use:
+      None - to indicated 'unboundness'
+      start = None --> UNBOUNDED PRECEDING
+      end = None --> UNBOUNDED FOLLOWING
+      negative numbers will depict preceding and positive will depict following
+
+      start will have to be leq than end
+    
+    Usage:
+        TODO
+    """
+    rows: bool=True
+    start: Optional[int]=None
+    end: Optional[int]=0
+
+    def __post_init__(self):
+        if not isinstance(self.rows, bool):
+            raise 
+        match self.start, self.end:
+            case None, None:
+                pass
+            case int(_), None:
+                pass
+            case None, int(_):
+                pass
+            case int(start), int(end):
+                if start > end:
+                    raise TypeError("start must be smaller than end")
+            case start, end:
+                raise TypeError(f"start, end must be ints, got {type(start)=} and {type(end)=}")
+        
+    
+    def unindented_sql(self) -> str:
+        rows_range = "ROWS" if self.rows else "RANGE"
+        between = [None, None]
+        match self.start:
+            case None:
+                between[0] = 'UNBOUNDED PRECEDING'
+            case 0:
+                between[0] = 'CURRENT ROW'
+            case s:
+                between[0] = f"{abs(s)} {'PRECEDING' if s < 0 else 'FOLLOWING'}"
+        match self.end:
+            case None:
+                between[1] = 'UNBOUNDED FOLLOWING'
+            case 0:
+                between[1] = 'CURRENT ROW'
+            case e:
+                between[1] = f"{abs(e)} {'PRECEDING' if e < 0 else 'FOLLOWING'}"
+        return f"{rows_range} BETWEEN {between[0]} AND {between[1]}"
+                
+
+@dataclass
+class WindowSpecExpression(Expression):
+    partition_by: Optional[List[SelectableExpressionType]]=None
+    order_by: Optional[List[Tuple[SelectableExpressionType, Optional[OrderBySpecExpression]]]]=None
+    window_frame_clause: Optional[WindowFrameExpression]=None
+
+    def __post_init__(self):
+        if self.partition_by is not None:
+            assert all([isinstance(_, SelectableExpressionType) for _ in self.partition_by])
+        if self.order_by is not None:
+            assert all([isinstance(_[0], SelectableExpressionType) for _ in self.order_by])
+            assert all([isinstance(_[1], OrderBySpecExpression) for _ in self.order_by if _[1] is not None])
+        if self.window_frame_clause is not None:
+            assert isinstance(self.window_frame_clause, WindowFrameExpression)
+
+        match self:
+            case WindowSpecExpression(part, None, spec) if spec is not None:
+                raise SyntaxError("If a WindowFrameExpression is defined in a WindowSpecExpression, and order_by object needs to be defined as well")
+            case WindowSpecExpression(_, order, WindowFrameExpression(False, _, _)) if len(order) > 1:
+                raise SyntaxError(f"RANGE allows only 1 numeric column, got {len(order)}")
+    
+    def unindented_sql(self) -> str:
+        result = []
+        match self:
+            case WindowSpecExpression(part, ord, spec):
+                match part:
+                    case None:
+                        pass
+                    case list(_):
+                        result.append(f"PARTITION BY {', '.join([_.unindented_sql() for _ in part])}")
+                match ord:
+                    case None:
+                        pass
+                    case list(_):
+                        ord_result = []
+                        for expr, order_by_spec in ord:
+                            curr = expr.unindented_sql()
+                            if order_by_spec is not None:
+                                curr += f" {order_by_spec.unindented_sql()}"
+                            ord_result.append(curr)
+                        result.append(f"ORDER BY {', '.join(ord_result)}")
+                match spec:
+                    case None:
+                        pass
+                    case WindowFrameExpression(_):
+                        result.append(spec.unindented_sql())
+        return ' '.join(result)
+                        
+        

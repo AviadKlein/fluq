@@ -124,10 +124,105 @@ class TestColumn(TestCase):
         result = functions.mod(col("a"), col("b"))
         self.assertEqual(result.expr.sql, "MOD(a, b)")
 
-        result = functions.floor(1.2)
+        result = functions.floor(lit(1.2))
         self.assertEqual(result.expr.sql, "FLOOR(1.2)")
 
         result = functions.current_date()
         self.assertEqual(result.expr.sql, "CURRENT_DATE()")
+
+        result = functions.sum(col("a"))
+        self.assertEqual(result.expr.sql, "SUM(a)")
+
+        result = functions.sum(col("a"))
+        self.assertEqual(result.expr.sql, "SUM(a)")
+
+    def test_ordering(self):
+        
+        c = col("a")
+        self.assertTrue(c.order_by_spec.asc)
+        self.assertEqual(c.order_by_spec.nulls, "FIRST")
+
+        c = col("a").asc(nulls="LAST")
+        self.assertTrue(c.order_by_spec.asc)
+        self.assertEqual(c.order_by_spec.nulls, "LAST")
+
+        c = col("a").desc()
+        self.assertFalse(c.order_by_spec.asc)
+        self.assertEqual(c.order_by_spec.nulls, "FIRST")
+
+        c = col("a").desc(nulls="LAST")
+        self.assertFalse(c.order_by_spec.asc)
+        self.assertEqual(c.order_by_spec.nulls, "LAST")
+
+        # keeps nulls spec when changing order
+        c = Column(
+            expression=ColumnExpression("a"), 
+            alias="a", 
+            order_by_spec=OrderBySpecExpression(asc=True, nulls="LAST")
+            )
+        c = c.desc()
+        self.assertEqual(c.order_by_spec.nulls, "LAST")
+
+    def test_window_spec(self):
+        ws = WindowSpec() # empty init
+        result = ws._to_expr().unindented_sql()
+        self.assertEqual(result, "")
+
+        ws = WindowSpec().partition_by("a", "b")
+        result = ws._to_expr().unindented_sql()
+        self.assertEqual(result, "PARTITION BY a, b")
+        
+
+        ws = WindowSpec().partition_by(col("a"), col("b"))
+        result = ws._to_expr().unindented_sql()
+        self.assertEqual(result, "PARTITION BY a, b")
+
+        ws = WindowSpec().partition_by(col("a"), col("b")).order_by("a")
+        result = ws._to_expr().unindented_sql()
+        self.assertEqual(result, "PARTITION BY a, b ORDER BY a ASC NULLS FIRST")
+
+        ws = WindowSpec().partition_by(col("a"), col("b")).order_by(col("a").desc(nulls="last"))
+        result = ws._to_expr().unindented_sql()
+        self.assertEqual(result, "PARTITION BY a, b ORDER BY a DESC NULLS LAST")
+
+        ws = (
+            WindowSpec().partition_by(col("a"), col("b"))
+            .order_by(col("a").desc(nulls="last")).rows_between(None, 0)
+            )
+        
+        result = ws._to_expr().unindented_sql()
+        expected = 'PARTITION BY a, b ORDER BY a DESC NULLS LAST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW'
+        self.assertEqual(result, expected)
+
+        # SQL example
+        t = (
+            table("db.schema.payments").as_("p")
+            .group_by(col("player"), col("date"))
+            .agg(
+                functions.sum(col("value")).as_("sum_value"),
+                functions.sum(col("value")).over(WindowSpec().partition_by("player")).as_("total_per_player"),
+                functions.sum(col("value")).over(WindowSpec().partition_by("player").order_by("date").rows_between(-5,5)).as_("running_window")
+                )
+        )
+        result = t.sql.split('\n')
+        print(result)
+        expected = ['SELECT player, date, SUM(value) AS sum_value, SUM(value) OVER(PARTITION BY player) AS total_per_player, SUM(value) OVER(PARTITION BY player ORDER BY date ASC NULLS FIRST ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING) AS running_window', 
+                    'FROM db.schema.payments', 
+                    'GROUP BY player, date']
+        self.assertEqual(result, expected)
+
+
+        with self.assertRaises(SyntaxError) as cm:
+            WindowSpec().partition_by("player").rows_between(-5,5)._to_expr()
+        self.assertEqual(
+            str(cm.exception), 
+            "If a WindowFrameExpression is defined in a WindowSpecExpression, and order_by object needs to be defined as well"
+            )
+        
+
+
+
+
+        
         
         

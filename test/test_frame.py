@@ -1,7 +1,7 @@
 from unittest import TestCase
 
 from frame import *
-from sql import lit, col, functions
+from sql import lit, col, functions, table
 
 class TestFrame(TestCase):
     
@@ -11,7 +11,7 @@ class TestFrame(TestCase):
 
     def test_call_method(self):
         frame = table("a")
-        col = frame("id")
+        col: Column = frame("id")
         self.assertTrue(isinstance(col, Column))
         self.assertEqual(col.expr.sql, "id")
 
@@ -161,16 +161,38 @@ class TestFrame(TestCase):
          result = (
              table("db.schema.payments").as_("t1")
              .group_by(col("customer_id"), col("date"))
-             .agg(functions.sum(col("value").as_("total_value")))
+             .agg(functions.sum(col("value")).as_("total_value"))
          )
-         print(result.sql.split('\n'))
          expected = [
              'SELECT customer_id, date, SUM(value) AS total_value', 
              'FROM db.schema.payments', 
              'GROUP BY customer_id, date']
          self.assertListEqual(result.sql.split('\n'), expected)
 
+    def test_order_by(self):
+        result = (
+             table("db.schema.payments").as_("t1")
+             .select("id", "time", "value")
+             .order_by("time")
+         ).sql.split('\n')
+        expected = ['SELECT id, time, value', 'FROM db.schema.payments', 'ORDER BY time ASC NULLS FIRST']
+        self.assertEqual(result, expected)
 
+    def test_limit(self):
+        result = (
+            table("db.schema.payments").as_("t1")
+             .select("id", "time", "value")
+             .order_by("time")
+             .limit(5)
+        ).sql.split('\n')
+        expected = ['SELECT id, time, value', 'FROM db.schema.payments', 'ORDER BY time ASC NULLS FIRST', 'LIMIT 5']
+        self.assertEqual(result, expected)
+
+    def test_union(self):
+        self.fail("Not Implemented")
+
+    def test_intersect(self):
+        self.fail("Not Implemented")
 
         
 

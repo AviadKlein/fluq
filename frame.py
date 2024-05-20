@@ -299,10 +299,40 @@ class Frame:
         """
         Add/Updates a Limit clause to the query
         """
-        raise NotImplementedError()
+        if not isinstance(limit, int):
+            raise TypeError(f"limit must be int, got {type(limit)}")
+        if offset is not None:
+            if not isinstance(offset, int):
+                raise TypeError(f"offset, if defined, must be int, got {type(offset)}")
+        limit_clause = LimitClauseExpression(limit=limit, offset=offset)
+        new_query = None
+        match self._query_expr:
+            case QueryExpression():
+                new_query = self._query_expr.copy(limit_clause=limit_clause)
+                return Frame(new_query)
+            case QueryAble():
+                raise NotImplementedError()
 
-    def order_by(self, *args) -> Frame:
-        raise NotImplementedError()
+    def order_by(self, *cols: str | Column) -> Frame:
+        """Will replace any order by clause that exists"""
+        cols = list(cols)
+        all_str = all([isinstance(_, str) for _ in cols])
+        all_col = all([isinstance(_, Column) for _ in cols])
+        if not (all_col or all_str):
+            raise TypeError("args must be all str or all Column")
+        if all_str:
+            cols = [Column(name=_) for _ in cols]
+        expr_and_specs = []
+        for col in cols:
+                expr_and_specs.append((col.expr, col.order_by_spec))
+        order_by_clause = OrderByClauseExpression(*expr_and_specs)
+        new_query = None
+        match self._query_expr:
+            case QueryExpression():
+                new_query = self._query_expr.copy(order_by_clause=order_by_clause)
+                return Frame(new_query, alias=self.alias)
+            case QueryAble():
+                raise NotImplementedError()
 
     def union(self, other: Frame) -> Frame:
         raise NotImplementedError()
@@ -369,34 +399,4 @@ class GroupByFrame:
                     group_by_clause=group_by_clause
                 )
         return Frame(queryable_expression=new_query)
-
-
-        
-
-
-def table(db_path: str) -> Frame:
-    """create a Frame from a pointer to a physical table
-    
-    this is the most recommended way to initialize a Frame object, 
-    as using the Expression api a much harder approach
-    
-    Arguments:
-        db_path: str - the physical name of the table (is checked by ValidName)
-
-    Examples:
-        >>> clients = table("db.schema.clients").as_("c")
-        >>> payments = table("db.schema.payments").as_("p")
-        >>> query = ( 
-            clients.join(payments, on=col("c.id") == col("p.client_id"), join_type='left')
-                .select("c.id", "p.transaction_time", "p.transaction_value")
-            )
-        >>> print(query.sql)
-            SELECT c.id, p.transaction_time, p.transaction_value
-            FROM db.schema.clients AS c LEFT OUTER JOIN db.schema.payments as p ON c.id = p.client_id
-    
-    """
-    from_clause = FromClauseExpression(table=TableNameExpression(db_path))
-    select_clause = SelectClauseExpression.from_args(ColumnExpression("*"))
-    query = QueryExpression(from_clause=from_clause, select_clause=select_clause)
-    return Frame(queryable_expression=query)
 
