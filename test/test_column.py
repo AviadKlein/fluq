@@ -1,7 +1,7 @@
 from unittest import TestCase
 
-from column import *
-from sql import *
+from sparkit.column import *
+from sparkit.sql import *
 
 
 class TestColumn(TestCase):

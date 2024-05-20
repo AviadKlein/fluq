@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from typing import Optional
-from expression import *
-from column import Column
+from sparkit.expression.base import *
+from sparkit.expression.query import QueryAble, QueryExpression
+from sparkit.expression.clause import *
+from sparkit.expression.join import *
+from sparkit.column import Column
 
 def copy_doc(source, preamble: Optional[str]=None):
     """decorator to copy __doc__ str between methods"""

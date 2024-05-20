@@ -1,7 +1,7 @@
 from unittest import TestCase
 
-from frame import *
-from sql import lit, col, functions, table
+from sparkit.frame import *
+from sparkit.sql import lit, col, functions, table
 
 class TestFrame(TestCase):
     

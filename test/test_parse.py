@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from parse import *
+from sparkit.parse import *
 
 class TestParsing(TestCase):
 

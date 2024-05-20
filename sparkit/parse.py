@@ -361,16 +361,3 @@ def parse_parenthesis(s: Union[Parsable, str],
             result += result_cont
     return result
 
-
-@ensure_parsable
-def parse_cte(s: Union[Parsable, str]) -> List[Tuple[Query, Alias]]:
-    pass
-
-@ensure_parsable
-def parse_query(s: Union[Parsable, str]) -> Query:
-    writing_order = ['WITH', 'SELECT', 'FROM', 'WHERE', 'GROUP BY', 'HAVING', 'QUALIFY', 'ORDER BY', 'LIMIT', 'OFFSET']
-    s = s.strip()
-    literals = parse_literals(s)
-    parenthesis = parse_parenthesis(s)
-
-

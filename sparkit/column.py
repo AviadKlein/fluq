@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from typing import Tuple
-from expression import *
+from sparkit.expression.base import *
+from sparkit.expression.function import *
+from sparkit.expression.operator import *
 
 _function_expressions = SQLFunctionExpressions()
 
