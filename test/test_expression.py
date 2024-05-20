@@ -24,18 +24,18 @@ class TestValidName(TestCase):
             self.assertEqual(r.name, i)
 
     def test_validname_length(self):
-        with self.assertRaises(AssertionError) as cm:
+        with self.assertRaises(TypeError) as cm:
             ValidName('')
         self.assertEqual("name cannot be an empty str", str(cm.exception))
 
     def test_validname_first_char(self):
-        with self.assertRaises(Exception) as cm:
+        with self.assertRaises(TypeError) as cm:
             ValidName('2aa')
         expected = "illegal name, due to bad characters in these locations: [(0, '2')]"
         self.assertEqual(expected, str(cm.exception))
 
     def test_validname_other_chars(self):
-        with self.assertRaises(Exception) as cm:
+        with self.assertRaises(TypeError) as cm:
             ValidName('a;a')
         expected = "illegal name, due to bad characters in these locations: [(1, ';')]"
         self.assertEqual(expected, str(cm.exception))
@@ -49,6 +49,9 @@ class TestValidName(TestCase):
     def test_validname_dots(self):
         self.assertEqual(ValidName("a.b.c").name, "a.b.c")
         self.assertEqual(ValidName("a....b..c").name, "a.b.c")
+
+    def test_validname_backticks(self):
+        self.assertEqual(ValidName("`this is a backticked name`").name, "`this is a backticked name`")
 
 class TestExpression(TestCase):
 

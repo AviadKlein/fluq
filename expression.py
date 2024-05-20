@@ -32,21 +32,23 @@ class ValidName:
         return re.sub(r'\.+', '.', s)
 
     def __post_init__(self):
-        if isinstance(self.name, ValidName):
-            pass
-        else:
-            length = len(self.name)
-            assert length > 0, "name cannot be an empty str"
-            bad_chars: List[Tuple[int, str]] = []
-            
-            for i, char in enumerate(self.name):
-                bad_char_condition = (i == 0 and char not in self.allowed_first_chars)
-                bad_char_condition |= (0 < i < length-1 and char not in self.allowed_mid_chars)
-                bad_char_condition |= (i == length-1 and char not in self.allowed_last_chars)
-                if bad_char_condition:
-                        bad_chars.append((i, char))
-            if len(bad_chars) > 0:
-                raise Exception(f"illegal name, due to bad characters in these locations: {bad_chars}")
+        match self.name:
+            case ValidName(name):
+                self.name = name
+            case str(name) if len(name) == 0:
+                raise TypeError("name cannot be an empty str")
+            case str(name) if name[0] == '`' and name[-1] == '`':
+                self.name = name
+            case str(name): 
+                bad_chars: List[Tuple[int, str]] = []
+                for i, char in enumerate(self.name):
+                    bad_char_condition = (i == 0 and char not in self.allowed_first_chars)
+                    bad_char_condition |= (0 < i < len(name)-1 and char not in self.allowed_mid_chars)
+                    bad_char_condition |= (i == len(name)-1 and char not in self.allowed_last_chars)
+                    if bad_char_condition:
+                            bad_chars.append((i, char))
+                if len(bad_chars) > 0:
+                    raise TypeError(f"illegal name, due to bad characters in these locations: {bad_chars}")
         self.name = self.remove_redundant_dots(self.name)
 
 
