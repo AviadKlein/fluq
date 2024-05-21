@@ -163,7 +163,7 @@ class FromClauseExpression(ClauseExpression):
                     case ('query', 'alias'):
                         query = kwargs[key1]
                         alias = kwargs[key2]
-                        assert isinstance(query, QueryAble)
+                        assert isinstance(query, Queryable)
                         assert isinstance(alias, str)
                         self._alias = ValidName(alias)
                         self.from_item = query
@@ -252,7 +252,7 @@ class FromClauseExpression(ClauseExpression):
     def unindented_sql(self) -> str:
         # resolve item:
         from_item_str = self.from_item.unindented_sql()
-        if isinstance(self.from_item, QueryAble):
+        if isinstance(self.from_item, Queryable):
             from_item_str = f"({from_item_str})"
         if self.alias is not None:
             from_item_str = f"{from_item_str} AS {self.alias}"

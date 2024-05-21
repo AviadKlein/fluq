@@ -188,12 +188,6 @@ class TestFrame(TestCase):
         expected = ['SELECT id, time, value', 'FROM db.schema.payments', 'ORDER BY time ASC NULLS FIRST', 'LIMIT 5']
         self.assertEqual(result, expected)
 
-    def test_union(self):
-        self.fail("Not Implemented")
-
-    def test_intersect(self):
-        self.fail("Not Implemented")
-
         
 
 

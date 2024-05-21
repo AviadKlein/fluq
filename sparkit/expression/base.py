@@ -198,11 +198,8 @@ class OrderBySpecExpression(Expression):
         result += f" NULLS {self.nulls}"
         return result
     
-class QueryAble(Expression):
-    
-    @abstractmethod
-    def copy(self):
-        pass
+class Queryable(Expression):
+    pass
     
                 
 

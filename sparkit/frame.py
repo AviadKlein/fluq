@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from typing import Optional
 from sparkit.expression.base import *
-from sparkit.expression.query import QueryAble, QueryExpression
+from sparkit.expression.query import Queryable, QueryExpression
 from sparkit.expression.clause import *
 from sparkit.expression.join import *
+from sparkit.expression.set_operation import *
 from sparkit.column import Column
+
 
 def copy_doc(source, preamble: Optional[str]=None):
     """decorator to copy __doc__ str between methods"""
@@ -25,8 +27,8 @@ class Frame:
         >>> frame: Frame = table("db.schema.t1").select("id", "name", "age")
     """
 
-    def __init__(self, queryable_expression: QueryAble, alias: Optional[str]=None):
-        assert isinstance(queryable_expression, QueryAble)
+    def __init__(self, queryable_expression: Queryable, alias: Optional[str]=None):
+        assert isinstance(queryable_expression, Queryable)
         self._query_expr = queryable_expression
         self._alias = None
         if alias is not None:
@@ -313,7 +315,7 @@ class Frame:
             case QueryExpression():
                 new_query = self._query_expr.copy(limit_clause=limit_clause)
                 return Frame(new_query)
-            case QueryAble():
+            case Queryable():
                 raise NotImplementedError()
 
     def order_by(self, *cols: str | Column) -> Frame:
@@ -334,14 +336,26 @@ class Frame:
             case QueryExpression():
                 new_query = self._query_expr.copy(order_by_clause=order_by_clause)
                 return Frame(new_query, alias=self.alias)
-            case QueryAble():
+            case Queryable():
                 raise NotImplementedError()
 
-    def union(self, other: Frame) -> Frame:
-        raise NotImplementedError()
+    def _set_operation(self, other: Frame, operation: SetOperation):
+        left = self._query_expr
+        right = other._query_expr
+        set_operation = operation(left=left, right=right)
+        return Frame(queryable_expression=set_operation)
 
-    def intersect(self, other: Frame) -> Frame:
-        raise NotImplementedError()
+    def union_all(self, other: Frame) -> Frame:
+        return self._set_operation(other=other, operation=UnionAllSetOperation)
+    
+    def union_distinct(self, other: Frame) -> Frame:
+        return self._set_operation(other=other, operation=UnionDistinctSetOperation)
+
+    def intersect_distinct(self, other: Frame) -> Frame:
+        return self._set_operation(other=other, operation=IntersectSetOperation)
+    
+    def except_distinct(self, other: Frame) -> Frame:
+        return self._set_operation(other=other, operation=ExceptSetOperation)
 
     @property
     def sql(self) -> str:

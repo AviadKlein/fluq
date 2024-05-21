@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from abc import abstractmethod
+
 from dataclasses import dataclass
 from typing import Optional, List
 
-from sparkit.expression.base import QueryAble
+from sparkit.expression.base import Queryable
 from sparkit.expression.clause import FromClauseExpression, WhereClauseExpression, \
     GroupByClauseExpression, SelectClauseExpression, HavingClauseExpression, QualifyClauseExpression, \
     OrderByClauseExpression, LimitClauseExpression
 
 @dataclass
-class QueryExpression(QueryAble):
+class QueryExpression(Queryable):
     from_clause: Optional[FromClauseExpression]=None
     where_clause: Optional[WhereClauseExpression]=None
     group_by_clause: Optional[GroupByClauseExpression]=None
@@ -79,7 +79,8 @@ class QueryExpression(QueryAble):
         return all(cond)
     
 
-class UnionQueryExpression(QueryAble):
 
-    def __init__(self, a: QueryExpression, b: QueryExpression):
-        raise NotImplementedError()
+
+    
+
+    

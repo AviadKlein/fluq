@@ -4,7 +4,7 @@ from typing import Optional, List
 from collections import Counter
 from abc import abstractmethod
 
-from sparkit.expression.base import Expression, TableNameExpression, ValidName, QueryAble
+from sparkit.expression.base import Expression, TableNameExpression, ValidName, Queryable
 from sparkit.expression.operator import LogicalOperationExpression
 
 
@@ -12,13 +12,13 @@ class JoinOperationExpression(Expression):
     """a base class for all relational operations"""
 
     def __init__(self,
-                 left: TableNameExpression | QueryAble | JoinOperationExpression,
-                 right: TableNameExpression | QueryAble,
+                 left: TableNameExpression | Queryable | JoinOperationExpression,
+                 right: TableNameExpression | Queryable,
                  left_alias: Optional[str]=None,
                  right_alias: Optional[str]=None,
                  on: Optional[LogicalOperationExpression]=None):
-        assert isinstance(left, TableNameExpression | QueryAble | JoinOperationExpression)
-        assert isinstance(right, TableNameExpression | QueryAble)
+        assert isinstance(left, TableNameExpression | Queryable | JoinOperationExpression)
+        assert isinstance(right, TableNameExpression | Queryable)
         if on is not None:
             assert isinstance(on, LogicalOperationExpression)
 
@@ -30,9 +30,9 @@ class JoinOperationExpression(Expression):
 
         if isinstance(self.left, JoinOperationExpression):
             assert self.left_alias is None, f"JoinOperationExpression can't have an alias"
-        if isinstance(self.left, QueryAble):
+        if isinstance(self.left, Queryable):
             assert self.left_alias is not None, "left QueryExpression must have an alias"
-        if isinstance(self.right, QueryAble):
+        if isinstance(self.right, Queryable):
             assert self.right_alias is not None, "right QueryExpression must have an alias"
 
         
@@ -106,7 +106,7 @@ class JoinOperationExpression(Expression):
             if alias is not None:
                 result = f"{result} AS {alias}"
             return result
-        elif isinstance(side, QueryAble):
+        elif isinstance(side, Queryable):
             return f"({side.sql}) AS {alias}"
         else:
             raise TypeError()       

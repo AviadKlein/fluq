@@ -1,6 +1,6 @@
 from abc import abstractmethod
 
-from sparkit.expression.base import Expression, LiteralTypes, LiteralExpression, NullExpression, QueryAble
+from sparkit.expression.base import Expression, LiteralTypes, LiteralExpression, NullExpression, Queryable
 
 class AbstractOperationExpression(Expression):
     """an expression to denote an operation between 2 expressions
@@ -100,13 +100,13 @@ class LessOrEqual(LogicalOperationExpression):
 class In(LogicalOperationExpression):
 
     def __init__(self, left: Expression, 
-                 *args: Expression | LiteralTypes | QueryAble):
+                 *args: Expression | LiteralTypes | Queryable):
         assert isinstance(left, Expression)
         self.left = left
         self.is_query = False
 
         # assert only 1 QueryExpression
-        _num_queries = sum([1 for _ in args if isinstance(_, QueryAble)])
+        _num_queries = sum([1 for _ in args if isinstance(_, Queryable)])
         assert _num_queries <= 1
 
         if _num_queries == 1:
