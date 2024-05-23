@@ -7,7 +7,7 @@ from typing import Optional, List
 from sparkit.expression.base import Queryable
 from sparkit.expression.clause import FromClauseExpression, WhereClauseExpression, \
     GroupByClauseExpression, SelectClauseExpression, HavingClauseExpression, QualifyClauseExpression, \
-    OrderByClauseExpression, LimitClauseExpression
+    OrderByClauseExpression, LimitClauseExpression, ClauseExpression
 
 @dataclass
 class QueryExpression(Queryable):
@@ -51,7 +51,7 @@ class QueryExpression(Queryable):
             limit_clause = self.limit_clause if limit_clause is None else limit_clause
         )
 
-    def clause_ordering(self) -> List:
+    def clause_ordering(self) -> List[ClauseExpression]:
         return [
             self.select_clause,
             self.from_clause, 
@@ -64,6 +64,13 @@ class QueryExpression(Queryable):
     
     def unindented_sql(self) -> str:
         return '\n'.join([_.unindented_sql() for _ in self.clause_ordering() if _ is not None])
+    
+    def tokens(self) -> List[str]:
+        result = []
+        for clause in self.clause_ordering():
+            if clause is not None:
+                result = [*result, *clause.tokens()]
+        return result
     
     def is_simple(self) -> bool:
         """a simple query is the following pattern: SELECT * FROM [TABLE]"""

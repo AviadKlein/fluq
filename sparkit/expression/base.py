@@ -97,12 +97,19 @@ class Expression(ABC):
     def __hash__(self) -> int:
         return hash(self.__class__.__name__ + self.unindented_sql())
     
+    @abstractmethod
+    def tokens(self) -> List[str]:
+        pass
+    
 
 class AnyExpression(Expression):
     """just in case you need to solve something"""
 
     def __init__(self, expr: str):
         self.expr = expr
+
+    def tokens(self) -> List[str]:
+        return [self.expr]
 
     def unindented_sql(self) -> str:
         return self.expr
@@ -116,16 +123,11 @@ class TableNameExpression(Expression):
             db_path = ValidName(db_path)
         self.db_path = db_path
 
+    def tokens(self) -> List[str]:
+        return [self.db_path.name]
+
     def unindented_sql(self) -> str:
         return self.db_path.name
-
-
-
-# class ToLogicalMixin(Expression):
-#     """a mixin to turn a logical or math or just a pointer or literal into a logical expression"""
-
-#     def to_logical(self) -> LogicalOperationExpression:
-#         return IsNotNull(self)
 
 
 class ColumnExpression(Expression):
@@ -143,6 +145,9 @@ class ColumnExpression(Expression):
     
     def unindented_sql(self) -> str:
         return self.name
+    
+    def tokens(self) -> List[str]:
+        return [self.name]
 
 
 LiteralTypes = int | float | bool | str
@@ -166,6 +171,10 @@ class LiteralExpression(Expression):
     def unindented_sql(self) -> str:
         return self.sql_value
     
+    def tokens(self) -> str:
+        return [self.sql_value]
+    
+    
 class NegatedExpression(Expression):
     """negate an expression"""
 
@@ -175,6 +184,9 @@ class NegatedExpression(Expression):
 
     def unindented_sql(self) -> str:
         return f"-{self.expr.unindented_sql()}"
+    
+    def tokens(self) -> List[str]:
+        return [f"-{self.expr.unindented_sql()}"]
 
 
 class NullExpression(Expression):
@@ -182,6 +194,9 @@ class NullExpression(Expression):
 
     def unindented_sql(self) -> str:
         return "NULL"
+    
+    def tokens(self) -> List[str]:
+        return ["NULL"]
 
 
 @dataclass
@@ -197,6 +212,12 @@ class OrderBySpecExpression(Expression):
         result = "ASC" if self.asc else "DESC"
         result += f" NULLS {self.nulls}"
         return result
+    
+    def tokens(self) -> List[str]:
+        result = "ASC" if self.asc else "DESC"
+        result += f" NULLS {self.nulls}"
+        return [result]
+    
     
 class Queryable(Expression):
     pass

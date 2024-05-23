@@ -167,23 +167,28 @@ class TestColumn(TestCase):
         ws = WindowSpec() # empty init
         result = ws._to_expr().unindented_sql()
         self.assertEqual(result, "")
+        self.assertListEqual(ws._to_expr().tokens(), [])
 
         ws = WindowSpec().partition_by("a", "b")
         result = ws._to_expr().unindented_sql()
         self.assertEqual(result, "PARTITION BY a, b")
+        self.assertListEqual(ws._to_expr().tokens(), ['PARTITION BY a, b'])
         
 
         ws = WindowSpec().partition_by(col("a"), col("b"))
         result = ws._to_expr().unindented_sql()
         self.assertEqual(result, "PARTITION BY a, b")
+        self.assertListEqual(ws._to_expr().tokens(), ['PARTITION BY a, b'])
 
         ws = WindowSpec().partition_by(col("a"), col("b")).order_by("a")
         result = ws._to_expr().unindented_sql()
         self.assertEqual(result, "PARTITION BY a, b ORDER BY a ASC NULLS FIRST")
+        self.assertListEqual(ws._to_expr().tokens(), ['PARTITION BY a, b', 'ORDER BY a ASC NULLS FIRST'])
 
         ws = WindowSpec().partition_by(col("a"), col("b")).order_by(col("a").desc(nulls="last"))
         result = ws._to_expr().unindented_sql()
         self.assertEqual(result, "PARTITION BY a, b ORDER BY a DESC NULLS LAST")
+        self.assertListEqual(ws._to_expr().tokens(), ['PARTITION BY a, b', 'ORDER BY a DESC NULLS LAST'])
 
         ws = (
             WindowSpec().partition_by(col("a"), col("b"))
@@ -194,6 +199,15 @@ class TestColumn(TestCase):
         expected = 'PARTITION BY a, b ORDER BY a DESC NULLS LAST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW'
         self.assertEqual(result, expected)
 
+    def test_window_spec_syntax_error_when_no_order_by_defined(self):
+        with self.assertRaises(SyntaxError) as cm:
+            WindowSpec().partition_by("player").rows_between(-5,5)._to_expr()
+        self.assertEqual(
+            str(cm.exception), 
+            "If a WindowFrameExpression is defined in a WindowSpecExpression, and order_by object needs to be defined as well"
+            )
+
+    def test_frame_example_with_window_spec(self):
         # SQL example
         t = (
             table("db.schema.payments").as_("p")
@@ -210,14 +224,13 @@ class TestColumn(TestCase):
                     'FROM db.schema.payments', 
                     'GROUP BY player, date']
         self.assertEqual(result, expected)
+        result = t._query_expr.tokens()
+        expected = ['SELECT', 'player', ',', 'date', ',', 'SUM(value) AS sum_value', ',', 'SUM(value) OVER(PARTITION BY player) AS total_per_player', ',', 'SUM(value) OVER(PARTITION BY player ORDER BY date ASC NULLS FIRST ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING) AS running_window', 
+                    'FROM', 'db.schema.payments', 
+                    'GROUP BY', 'player, date']
+        self.assertListEqual(result, expected)
 
-
-        with self.assertRaises(SyntaxError) as cm:
-            WindowSpec().partition_by("player").rows_between(-5,5)._to_expr()
-        self.assertEqual(
-            str(cm.exception), 
-            "If a WindowFrameExpression is defined in a WindowSpecExpression, and order_by object needs to be defined as well"
-            )
+        
         
 
 

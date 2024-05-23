@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import abstractclassmethod
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -13,60 +13,77 @@ class SetOperation(Queryable):
     left: Queryable
     right: Queryable
 
-    @abstractmethod
-    def symbol(self) -> str:
+    @abstractclassmethod
+    def symbol() -> str:
         pass
 
-    def flatten(self, append_to: Optional[List[QueryExpression, Optional[SetOperation]]]=None) -> List[QueryExpression, Optional[SetOperation]]:
+    def flatten(self) -> List[QueryExpression | Optional[SetOperation]]:
         """flattens left and right into a list of query expr and set operation:
-        the list with n elements should look like this: (Q_1, OP_1), (Q_2, OP_2), ...., (Q_n, None)
+        the list with n elements should look like this: Q_1, OP_1, Q_2, OP_2, ...., Q_{n-1}, OP_{n-1}, Q_n
+        output length should be 2n-1
         """
-        if append_to is None:
-            append_to = []
-        match self.left, self.right:
-            case l, r if isinstance(l, QueryExpression) and isinstance(r, QueryExpression):
-                append_to.append((l, self.__class__))
-                append_to.append((r, None))
-            case l, r if isinstance(l, QueryExpression) and isinstance(r, SetOperation):
-                append_to.append((l, self.__class__))
-                append_to = r.flatten(append_to=append_to)
-            case l, r if isinstance(l, SetOperation) and isinstance(r, QueryExpression):
-                append_to = l.flatten(append_to=append_to)
-                append_to.append((r, None))
-            case l, r if isinstance(l, SetOperation) and isinstance(r, SetOperation):
-                append_to = l.flatten(append_to=append_to)
-                append_to = r.flatten(append_to=append_to)
-        return append_to
+        if isinstance(self.left, QueryExpression) and isinstance(self.right, QueryExpression):
+            return [self.left, self, self.right]
+        elif isinstance(self.left, QueryExpression) and isinstance(self.right, SetOperation):
+            return [self.left, self, *self.right.flatten()]
+        elif isinstance(self.left, SetOperation) and isinstance(self.right, QueryExpression):
+            return [*self.left.flatten(), self, self.right]
+        elif isinstance(self.left, SetOperation) and isinstance(self.right, SetOperation):
+            return [*self.left.flatten(), self, *self.right.flatten()]
+        else:
+            raise Exception(f"unsupported types, {type(self.left)=} {type(self.right)=}")
     
     def tokens(self) -> List[str]:
-        pass
+        flat = self.flatten()
+        if len(flat) == 3:
+            return [*flat[0].tokens(), flat[1].symbol(), *flat[2].tokens()]
+        result = []
+        parenthesis_cnt = 0
+        for obj in flat:
+            if obj is None:
+                pass
+            elif isinstance(obj, QueryExpression):
+                result = [*result, *obj.tokens()]
+            elif isinstance(obj, SetOperation):
+                parenthesis_cnt += 1
+                result = [*result, obj.symbol(), '(']
+        result += [')']*parenthesis_cnt
+        return result
+                    
+                        
+
+
                 
 
     def unindented_sql(self) -> str:
         left = self.left.unindented_sql()
-        right = None
+        right = self.right.unindented_sql()
         return f"{left}\n{self.symbol()}\n{right}"
         
 @dataclass
 class UnionAllSetOperation(SetOperation):
 
-    def symbol(self) -> str:
+    @classmethod
+    def symbol(cls) -> str:
         return "UNION ALL"
     
 @dataclass
 class UnionDistinctSetOperation(SetOperation):
 
-    def symbol(self) -> str:
+    @classmethod
+    def symbol(cls) -> str:
         return "UNION DISTINCT"
     
 @dataclass
 class IntersectSetOperation(SetOperation):
 
-    def symbol(self) -> str:
+    @classmethod
+    def symbol(cls) -> str:
         return "INTERSECT DISTINCT"
     
 @dataclass
 class ExceptSetOperation(SetOperation):
 
-    def symbol(self) -> str:
+    @classmethod
+    def symbol(cls) -> str:
         return "EXCEPT DISTINCT"

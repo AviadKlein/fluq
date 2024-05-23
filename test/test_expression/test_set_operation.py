@@ -1,6 +1,7 @@
 from unittest import TestCase
 
 from sparkit.sql import table
+from sparkit.expression.set_operation import *
 
 class TestSetOperation(TestCase):
 
@@ -36,24 +37,30 @@ class TestSetOperation(TestCase):
         expected = ['SELECT *', 'FROM a', 'EXCEPT DISTINCT', 'SELECT *', 'FROM b']
         self.assertListEqual(result, expected)
 
+    def test_tokens_2_sets(self):
+        a = table("a")
+        b = table("b")
+        result = a.union_all(b)._query_expr.tokens()
+        expected = ['SELECT', '*', 'FROM', 'a', 'UNION ALL','SELECT', '*', 'FROM', 'b']
+        self.assertListEqual(result, expected)
+        
     def test_chained_set_operations(self):
         a = table("a")
         b = table("b")
         c = table("c")
         d = table("d")
         union = a.union_all(b).union_all(c).union_all(d)
-        result = union.sql.split('\n')
-        print(result)
+        result = union._query_expr.tokens()
         expected = [
-            'SELECT *', 
-            'FROM a',
-            'UNION ALL (', 
-            'SELECT *', 
-            'FROM b', 
-            'UNION ALL (', 
-            'SELECT *', 
-            'FROM c', 
-            'UNION ALL', 
-            'SELECT *', 
-            'FROM d))']
+            'SELECT', '*', 
+            'FROM', 'a',
+            'UNION ALL', '(', 
+            'SELECT', '*', 
+            'FROM', 'b', 
+            'UNION ALL', '(', 
+            'SELECT', '*', 
+            'FROM', 'c', 
+            'UNION ALL', '(', 
+            'SELECT', '*', 
+            'FROM', 'd', ')', ')', ')']
         self.assertListEqual(result, expected)

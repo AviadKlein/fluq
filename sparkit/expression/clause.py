@@ -58,9 +58,8 @@ class SelectClauseExpression(ClauseExpression):
                     raise AssertionError("""can only have 1 ColumnExpression("*")""")
             
             return expr, optional_alias
-            
 
-    
+
     def add(self, expression: SelectableExpressionType, alias: Optional[ValidName | str]=None) -> SelectClauseExpression:
         expr, optional_alias = self._resolve_arg((expression, alias))
 
@@ -104,6 +103,17 @@ class SelectClauseExpression(ClauseExpression):
         f = lambda expr, alias: f"{expr.sql}" + ("" if alias is None else f" AS {alias.name}")
         exprs = ', '.join([f(expr, alias) for expr, alias in z])
         return f"SELECT {exprs}"
+
+
+    def tokens(self) -> List[str]:
+        z = zip(self.expressions, self.aliases)
+        f = lambda expr, alias: f"{expr.sql}" + ("" if alias is None else f" AS {alias.name}")
+        exprs = [f(expr, alias) for expr, alias in z]
+        last_expr = exprs[-1]
+        zipped = zip(exprs[:-1], [',']*(len(exprs)-1))
+        zipped = [elem for pair in zipped for elem in pair]
+        return ['SELECT', *zipped, last_expr]
+
     
 class FromClauseExpression(ClauseExpression):
     """an Expression to hold the From clause
@@ -257,6 +267,14 @@ class FromClauseExpression(ClauseExpression):
         if self.alias is not None:
             from_item_str = f"{from_item_str} AS {self.alias}"
         return f"FROM {from_item_str}"
+    
+    def tokens(self) -> List[str]:
+        from_item_tkns = self.from_item.tokens()
+        if isinstance(self.from_item, Queryable):
+            from_item_tkns = ['(',*from_item_tkns,')']
+        if self.alias is not None:
+            from_item_tkns = [*from_item_tkns, 'AS', self.alias]
+        return ['FROM', *from_item_tkns]
 
 
 class PredicateClauseExpression(ClauseExpression):
@@ -282,6 +300,9 @@ class PredicateClauseExpression(ClauseExpression):
     
     def unindented_sql(self) -> str:
         return f"{self.clause_symbol()} {self.predicate.unindented_sql()}"
+    
+    def tokens(self) -> List[str]:
+        return [self.clause_symbol(), *self.predicate.tokens()]
     
     
 
@@ -345,6 +366,12 @@ class GroupByClauseExpression(ClauseExpression):
             else [_.unindented_sql() for _ in self._expressions]
         gi_str = ', '.join(gi_str)
         return f"GROUP BY {gi_str}"
+    
+    def tokens(self) -> List[str]:
+        gi_str = [str(_) for _ in self._positionals] if self.is_positional \
+            else [_.unindented_sql() for _ in self._expressions]
+        gi_str = ', '.join(gi_str)
+        return ['GROUP BY', gi_str]
 
 class OrderByClauseExpression(ClauseExpression):
 
@@ -405,6 +432,11 @@ class OrderByClauseExpression(ClauseExpression):
         items_str = self.resolve_positional_sql() if self.is_positional \
             else self.resolve_expression_sql()
         return f"ORDER BY {items_str}"
+    
+    def tokens(self) -> List[str]:
+        items_str = self.resolve_positional_sql() if self.is_positional \
+            else self.resolve_expression_sql()
+        return ['ORDER BY', items_str]
 
 
 class LimitClauseExpression(ClauseExpression):
@@ -419,3 +451,7 @@ class LimitClauseExpression(ClauseExpression):
     def unindented_sql(self) -> str:
         _offset = "" if self.offset is None else f" OFFSET {self.offset}"
         return f"LIMIT {self.limit}{_offset}"
+    
+    def tokens(self) -> List[str]:
+        _offset = "" if self.offset is None else f" OFFSET {self.offset}"
+        return ['LIMIT', f"{self.limit}{_offset}"]

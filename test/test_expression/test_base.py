@@ -64,6 +64,7 @@ class TestExpression(TestCase):
     def test_column_expression_star(self):
         col = ColumnExpression("*")
         self.assertEqual(col.name, "*")
+        self.assertEqual(col.tokens(), ["*"])
 
     def test_column_expression_star_equals(self):
         c1 = ColumnExpression("*")
@@ -73,7 +74,6 @@ class TestExpression(TestCase):
         self.assertEqual(c1, c2)
         self.assertNotEqual(c1, c3)
         self.assertEqual(c3, c4)
-
 
 
     def test_literal_expression(self):
@@ -88,3 +88,9 @@ class TestExpression(TestCase):
         self.assertEqual(float_lit.sql, "43.22")
         self.assertEqual(float_lit2.sql, "1000000.0")
         self.assertEqual(str_lit.sql, "'hello'")
+
+        self.assertEqual(bool_lit.tokens(), ["TRUE"])
+        self.assertEqual(int_lit.tokens(), ["3245"])
+        self.assertEqual(float_lit.tokens(), ["43.22"])
+        self.assertEqual(float_lit2.tokens(), ["1000000.0"])
+        self.assertEqual(str_lit.tokens(), ["'hello'"])

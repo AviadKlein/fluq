@@ -115,6 +115,40 @@ class JoinOperationExpression(Expression):
         left = self.resolve_sql("left")
         right = self.resolve_sql("right")
         return f"{left} {self.operator()} {right}{self.on_clause()}"
+    
+    def resolve_tokens(self, side: str):
+        match side:
+            case "left":
+                side = self.left
+                alias = self.left_alias
+            case "right":
+                side = self.right
+                alias = self.right_alias
+            case _:
+                raise TypeError(f"resolve tokens only works on 'left' or 'right', got {side}")
+        
+        result = side.tokens()
+        if isinstance(side, TableNameExpression | JoinOperationExpression):
+            
+            if alias is not None:
+                result = [*result, 'AS', alias]
+            return result
+        elif isinstance(side, Queryable):
+            return ['(' ,*result, ')', 'AS', alias]
+        else:
+            raise TypeError()
+        
+    def resolve_on_clause_tokens(self) -> List[str]:
+        if self.on is None:
+            return []
+        else:
+            return ['ON', *self.on.tokens()]
+        
+    def tokens(self) -> List[str]:
+        left: List[str] = self.resolve_tokens("left")
+        right: List[str] = self.resolve_tokens("right")
+        on_clause: List[str] = self.resolve_on_clause_tokens()
+        return [*left, self.operator(), *right, *on_clause]
 
 
 class InnerJoinOperationExpression(JoinOperationExpression):

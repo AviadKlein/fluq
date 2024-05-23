@@ -85,6 +85,25 @@ class WindowFrameExpression(Expression):
             case e:
                 between[1] = f"{abs(e)} {'PRECEDING' if e < 0 else 'FOLLOWING'}"
         return f"{rows_range} BETWEEN {between[0]} AND {between[1]}"
+    
+    def tokens(self) -> List[str]:
+        rows_range = "ROWS" if self.rows else "RANGE"
+        between = [None, None]
+        match self.start:
+            case None:
+                between[0] = 'UNBOUNDED PRECEDING'
+            case 0:
+                between[0] = 'CURRENT ROW'
+            case s:
+                between[0] = f"{abs(s)} {'PRECEDING' if s < 0 else 'FOLLOWING'}"
+        match self.end:
+            case None:
+                between[1] = 'UNBOUNDED FOLLOWING'
+            case 0:
+                between[1] = 'CURRENT ROW'
+            case e:
+                between[1] = f"{abs(e)} {'PRECEDING' if e < 0 else 'FOLLOWING'}"
+        return [rows_range, 'BETWEEN', between[0], 'AND', between[1]]
 
 @dataclass
 class WindowSpecExpression(Expression):
@@ -133,6 +152,34 @@ class WindowSpecExpression(Expression):
                     case WindowFrameExpression(_):
                         result.append(spec.unindented_sql())
         return ' '.join(result)
+    
+    def tokens(self) -> List[str]:
+        result = []
+        match self:
+            case WindowSpecExpression(part, ord, spec):
+                match part:
+                    case None:
+                        pass
+                    case list(_):
+                        result.append(f"PARTITION BY {', '.join([_.unindented_sql() for _ in part])}")
+                match ord:
+                    case None:
+                        pass
+                    case list(_):
+                        ord_result = []
+                        for expr, order_by_spec in ord:
+                            curr = expr.unindented_sql()
+                            if order_by_spec is not None:
+                                curr += f" {order_by_spec.unindented_sql()}"
+                            ord_result.append(curr)
+                        result.append(f"ORDER BY {', '.join(ord_result)}")
+                match spec:
+                    case None:
+                        pass
+                    case WindowFrameExpression(_):
+                        result.append(spec.unindented_sql())
+        return result
+
 
 @dataclass
 class AnalyticFunctionExpression(Expression):
@@ -141,6 +188,9 @@ class AnalyticFunctionExpression(Expression):
 
     def unindented_sql(self) -> str:
         return f"{self.expr.unindented_sql()} OVER({self.window_spec_expr.unindented_sql()})"
+    
+    def tokens(self) -> List[str]:
+        return [self.expr.tokens(), 'OVER', '(', *self.window_spec_expr.tokens(), ')']
     
     # Functions
 class AbstractFunctionExpression(Expression):
@@ -196,6 +246,10 @@ class AbstractFunctionExpression(Expression):
     def unindented_sql(self) -> str:
         args: str = ', '.join([_.sql for _ in self.kwargs.values()])
         return f"{self.symbol()}({args})"
+    
+    def tokens(self) -> List[str]:
+        args: str = ', '.join([_.sql for _ in self.kwargs.values()])
+        return [f"{self.symbol()}({args})"]
     
 
 class SQLFunctionExpressions:
@@ -280,4 +334,9 @@ class CaseExpression(Expression):
         cases = [f"{indent.plus1()}{case}" for case in cases]
         cases = '\n'.join(cases)
         return f"{indent}CASE\n{cases}\n{indent}END"     
+    
+    def tokens(self) -> List[str]:
+        if len(self.cases) == 0:
+            raise ValueError("can't render to sql with 0 cases")
+        return ['CASE', *self.cases_unindented_sql(), 'END']
 
