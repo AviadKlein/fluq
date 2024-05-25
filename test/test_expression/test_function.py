@@ -31,7 +31,7 @@ class TestFunction(TestCase):
                 .add(Equal(ColumnExpression("a"), LiteralExpression(1)), LiteralExpression("good"))
                 .add(Equal(ColumnExpression("a"), LiteralExpression(0)), LiteralExpression("bad"))
         )
-        expected = ['CASE', "WHEN a = 1 THEN 'good'", "WHEN a = 0 THEN 'bad'", "END"]
+        expected = ['CASE', 'WHEN', 'a', '=', '1', 'THEN', "'good'", 'WHEN', 'a', '=', '0', 'THEN', "'bad'", "END"]
         
         self.assertListEqual(case.tokens(), expected)
 
@@ -42,6 +42,6 @@ class TestFunction(TestCase):
                 .add_otherwise(LiteralExpression("dunno"))
         )
 
-        expected = ['CASE', "WHEN a = 1 THEN 'good'", "WHEN a = 0 THEN 'bad'", "ELSE 'dunno'", 'END']
+        expected = ['CASE', 'WHEN', 'a', '=', '1', 'THEN', "'good'", 'WHEN', 'a', '=', '0', 'THEN', "'bad'", "ELSE", "'dunno'", 'END']
         
         self.assertListEqual(case.tokens(), expected)

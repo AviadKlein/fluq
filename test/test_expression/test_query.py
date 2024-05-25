@@ -15,7 +15,7 @@ class TestQuery(TestCase):
             from_clause=FromClauseExpression(table="db.schema.table1"),
             select_clause=SelectClauseExpression([ColumnExpression("a"), ColumnExpression("b")], [None, None])
             )
-        expected = """SELECT a, b\nFROM db.schema.table1"""
+        expected = """SELECT a, b FROM db.schema.table1"""
         self.assertEqual(query.sql, expected)
         self.assertListEqual(query.tokens(), ['SELECT', 'a', ',', 'b', 'FROM', 'db.schema.table1'])
 

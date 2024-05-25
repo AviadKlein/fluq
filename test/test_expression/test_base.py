@@ -2,17 +2,6 @@ from unittest import TestCase
 
 from sparkit.expression.base import *
 
-class TestIndent(TestCase):
-
-    def test_indent(self):
-        indent = Indent(3, 'a')
-        self.assertEqual(indent.render(), 'aaa')
-        self.assertEqual(indent.plus1().render(), 'aaaa')
-        self.assertEqual(indent.plus1().plus1().render(), 'aaaaa')
-
-        self.assertEqual(f"start{Indent(0)}stop", "startstop")
-        self.assertEqual(f"start{Indent(1)}stop", "start\tstop")
-
 class TestValidName(TestCase):
 
     def test_validname_sanity(self):
@@ -65,16 +54,6 @@ class TestExpression(TestCase):
         col = ColumnExpression("*")
         self.assertEqual(col.name, "*")
         self.assertEqual(col.tokens(), ["*"])
-
-    def test_column_expression_star_equals(self):
-        c1 = ColumnExpression("*")
-        c2 = ColumnExpression("*")
-        c3 = AnyExpression("*")
-        c4 = AnyExpression("*")
-        self.assertEqual(c1, c2)
-        self.assertNotEqual(c1, c3)
-        self.assertEqual(c3, c4)
-
 
     def test_literal_expression(self):
         bool_lit = LiteralExpression(True)

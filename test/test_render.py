@@ -37,7 +37,9 @@ class TestRendering(TestCase):
         )
 
         result = SqlRenderer.render(tokens, context2config={'SELECT': select_config})
-        expected = textwrap.dedent("""SELECT\n\t* FROM t1 WHERE t1.id IS NOT NULL""")
+        expected = textwrap.dedent("""SELECT\n\t * FROM t1 WHERE t1.id IS NOT NULL""")
+        print(result)
+        print(expected)
         self.assertEqual(result, expected)
 
     def test_config2(self):
@@ -54,7 +56,9 @@ class TestRendering(TestCase):
         }
 
         result = SqlRenderer.render(tokens, context2config=context2config)
-        expected = """SELECT\n  * \nFROM\n  t1 \nWHERE\n  t1.id IS NOT NULL"""
+        expected = """SELECT\n   *\nFROM\n   t1\nWHERE\n   t1.id IS NOT NULL"""
+        print(result)
+        print(expected)
         compare_str(result, expected)
 
     def test_subqueries(self):
@@ -70,7 +74,8 @@ class TestRendering(TestCase):
             'WHERE': config
         }
         result = SqlRenderer.render(tokens, context2config=context2config)
-        print(result)
+        expected = """SELECT\n   a, a+2 AS g\nFROM\n   (\nSELECT\n   a\nFROM\n   c ) AS t1\nWHERE\n   t1.id IS NOT NULL"""
+        self.assertEqual(result, expected)
 
     
     

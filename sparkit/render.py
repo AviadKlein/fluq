@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import Any, List, Dict
 
 # This module takes care of rendering SQL
 # users can implement other RenderingContextConfig then the ones provided here
@@ -33,12 +33,14 @@ class RenderingContextConfig:
         match token:
             case ',' if self.comma_line_break:
                 return token + '\n' + self.indent(indent_depth)
+            case ',' if not self.comma_line_break:
+                return token
             case '(' if self.left_parenthesis_break:
                 return token + '\n' + self.indent(indent_depth)
             case ')' if self.right_parenthesis_break:
                 return token + '\n' + self.indent(indent_depth)
             case token:
-                return token + self.spacing
+                return self.spacing + token
 
 
 class SqlRenderer:
@@ -48,7 +50,6 @@ class SqlRenderer:
                context2config: Dict[str, RenderingContextConfig]={},
                ) -> str:
         indent_depth = 0
-        indent_dict = {}
         current_config = None
         flat_config = RenderingContextConfig()
         result = ''
@@ -76,5 +77,31 @@ class SqlRenderer:
                 else:
                     result += current_config.handle_token(token=token, indent_depth=indent_depth)
         return result.strip()
+    
+class Renderable:
+
+    def __init__(self, tokens: List[str]):
+        self.tokens = tokens
+
+    def __repr__(self) -> str:
+        return self.__str__()
+    
+    def __str__(self) -> str:
+        return SqlRenderer.render(self.tokens)
+    
+    def __call__(self, context2config: Dict[str, RenderingContextConfig]) -> Any:
+        return SqlRenderer.render(self.tokens, context2config=context2config)
+    
+    def __eq__(self, __value: object) -> bool:
+        if isinstance(__value, str):
+            return self.__str__() == __value
+        raise SyntaxError(f"you are comparing a {self.__class__.__name__} object with an object of type {type(__value)}, make sure to compare Renderable with str only")
+    
+    @property
+    def str(self) -> str:
+        return self.__str__()
+
+        
+            
 
 

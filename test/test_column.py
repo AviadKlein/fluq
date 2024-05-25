@@ -8,6 +8,7 @@ class TestColumn(TestCase):
 
     def test_init(self):
         c = col("a")
+        print(c.expr.sql)
         self.assertEqual(c.expr.sql, "a")
         self.assertIsNone(c.alias)
         self.assertTrue(isinstance(c.expr, ColumnExpression))
@@ -75,8 +76,8 @@ class TestColumn(TestCase):
         self.assertEqual(a.between(2, 3).expr.sql, "a BETWEEN 2 AND 3")
         self.assertEqual(a.between(lit(2), lit(3)).expr.sql, "a BETWEEN 2 AND 3")
 
-        self.assertEqual(((a <= b) & (b < 5)).expr.sql, "(a <= b) AND (b < 5)")
-        self.assertEqual(((a <= b) | (b < 5)).expr.sql, "(a <= b) OR (b < 5)")
+        self.assertEqual(((a <= b) & (b < 5)).expr.sql, "( a <= b ) AND ( b < 5 )")
+        self.assertEqual(((a <= b) | (b < 5)).expr.sql, "( a <= b ) OR ( b < 5 )")
 
         self.assertEqual(a.like("%%foobar").expr.sql, "a LIKE '%%foobar'")
 
@@ -112,9 +113,9 @@ class TestColumn(TestCase):
         expr: CaseExpression = case_.expr
 
         expected = [
-            'WHEN a > 5 THEN 0',
-            'WHEN a > 100 THEN 1',
-            'ELSE -1'
+            'WHEN', 'a', '>', '5', 'THEN', '0',
+            'WHEN', 'a', '>', '100', 'THEN', '1',
+            'ELSE', '-1'
         ]
         result = expr.cases_unindented_sql()
         self.assertListEqual(expected, result)
@@ -165,39 +166,35 @@ class TestColumn(TestCase):
 
     def test_window_spec(self):
         ws = WindowSpec() # empty init
-        result = ws._to_expr().unindented_sql()
-        self.assertEqual(result, "")
-        self.assertListEqual(ws._to_expr().tokens(), [])
+        result = ws._to_expr().tokens()
+        self.assertEqual(result, [])
 
         ws = WindowSpec().partition_by("a", "b")
-        result = ws._to_expr().unindented_sql()
-        self.assertEqual(result, "PARTITION BY a, b")
-        self.assertListEqual(ws._to_expr().tokens(), ['PARTITION BY a, b'])
+        result = ws._to_expr().tokens()
+        self.assertEqual(result, ['PARTITION BY', 'a', 'b'])
         
 
         ws = WindowSpec().partition_by(col("a"), col("b"))
-        result = ws._to_expr().unindented_sql()
-        self.assertEqual(result, "PARTITION BY a, b")
-        self.assertListEqual(ws._to_expr().tokens(), ['PARTITION BY a, b'])
+        result = ws._to_expr().tokens()
+        self.assertEqual(result, ['PARTITION BY' ,'a', 'b'])
 
         ws = WindowSpec().partition_by(col("a"), col("b")).order_by("a")
-        result = ws._to_expr().unindented_sql()
-        self.assertEqual(result, "PARTITION BY a, b ORDER BY a ASC NULLS FIRST")
-        self.assertListEqual(ws._to_expr().tokens(), ['PARTITION BY a, b', 'ORDER BY a ASC NULLS FIRST'])
+        result = ws._to_expr().tokens()
+        print(result)
+        self.assertEqual(result, ['PARTITION BY', 'a', 'b', 'ORDER BY', 'a', 'ASC NULLS FIRST'])
 
         ws = WindowSpec().partition_by(col("a"), col("b")).order_by(col("a").desc(nulls="last"))
-        result = ws._to_expr().unindented_sql()
-        self.assertEqual(result, "PARTITION BY a, b ORDER BY a DESC NULLS LAST")
-        self.assertListEqual(ws._to_expr().tokens(), ['PARTITION BY a, b', 'ORDER BY a DESC NULLS LAST'])
+        result = ws._to_expr().tokens()
+        self.assertEqual(result, ['PARTITION BY', 'a', 'b', 'ORDER BY', 'a', 'DESC NULLS LAST'])
 
         ws = (
             WindowSpec().partition_by(col("a"), col("b"))
             .order_by(col("a").desc(nulls="last")).rows_between(None, 0)
             )
         
-        result = ws._to_expr().unindented_sql()
-        expected = 'PARTITION BY a, b ORDER BY a DESC NULLS LAST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW'
-        self.assertEqual(result, expected)
+        result = ws._to_expr().tokens()
+        expected = ['PARTITION BY', 'a', 'b', 'ORDER BY', 'a' ,'DESC NULLS LAST', 'ROWS', 'BETWEEN', 'UNBOUNDED PRECEDING', 'AND', 'CURRENT ROW']
+        self.assertListEqual(result, expected)
 
     def test_window_spec_syntax_error_when_no_order_by_defined(self):
         with self.assertRaises(SyntaxError) as cm:
@@ -218,16 +215,16 @@ class TestColumn(TestCase):
                 functions.sum(col("value")).over(WindowSpec().partition_by("player").order_by("date").rows_between(-5,5)).as_("running_window")
                 )
         )
-        result = t.sql.split('\n')
+        result = t.sql
         print(result)
-        expected = ['SELECT player, date, SUM(value) AS sum_value, SUM(value) OVER(PARTITION BY player) AS total_per_player, SUM(value) OVER(PARTITION BY player ORDER BY date ASC NULLS FIRST ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING) AS running_window', 
-                    'FROM db.schema.payments', 
-                    'GROUP BY player, date']
+        expected = """SELECT player, date, SUM(value) AS sum_value, SUM(value) OVER ( PARTITION BY player ) AS total_per_player, SUM(value) OVER ( PARTITION BY player ORDER BY date ASC NULLS FIRST ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING ) AS running_window FROM db.schema.payments GROUP BY player, date"""
         self.assertEqual(result, expected)
+        
         result = t._query_expr.tokens()
-        expected = ['SELECT', 'player', ',', 'date', ',', 'SUM(value) AS sum_value', ',', 'SUM(value) OVER(PARTITION BY player) AS total_per_player', ',', 'SUM(value) OVER(PARTITION BY player ORDER BY date ASC NULLS FIRST ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING) AS running_window', 
+        expected = ['SELECT', 'player', ',', 'date', ',', 'SUM(value)', 'AS' ,'sum_value', ',', 'SUM(value)', 'OVER', '(', 'PARTITION BY', 'player',')', 'AS', 'total_per_player', ',', 'SUM(value)', 'OVER','(','PARTITION BY', 'player',
+                    'ORDER BY', 'date', 'ASC NULLS FIRST', 'ROWS', 'BETWEEN', '5 PRECEDING', 'AND', '5 FOLLOWING',')', 'AS', 'running_window', 
                     'FROM', 'db.schema.payments', 
-                    'GROUP BY', 'player, date']
+                    'GROUP BY', 'player', ',', 'date']
         self.assertListEqual(result, expected)
 
         

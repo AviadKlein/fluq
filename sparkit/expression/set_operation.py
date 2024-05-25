@@ -49,16 +49,6 @@ class SetOperation(Queryable):
                 result = [*result, obj.symbol(), '(']
         result += [')']*parenthesis_cnt
         return result
-                    
-                        
-
-
-                
-
-    def unindented_sql(self) -> str:
-        left = self.left.unindented_sql()
-        right = self.right.unindented_sql()
-        return f"{left}\n{self.symbol()}\n{right}"
         
 @dataclass
 class UnionAllSetOperation(SetOperation):

@@ -36,17 +36,6 @@ class AbstractOperationExpression(Expression):
     def op_str(self) -> str:
         """the string that will be presented in the SQL str"""
         pass
-
-    def unindented_sql(self) -> str:
-        """the SQL str"""
-        _left = self.left.unindented_sql()
-        if self._wrap_left:
-            _left = f"({_left})"
-        
-        _right = self.right.unindented_sql()
-        if self._wrap_right:
-            _right = f"({_right})"
-        return f"{_left} {self.op_str} {_right}"
     
     def tokens(self) -> List[str]:
         _left: List[str] = self.left.tokens()
@@ -146,13 +135,6 @@ class In(LogicalOperationExpression):
     def op_str(self) -> str:
         return "IN"
 
-    def unindented_sql(self) -> str:
-        if self.is_query:
-            return f"{self.left.unindented_sql()} {self.op_str} ( {self.query.sql} )"
-        else:
-            resolved_str = ', '.join([_.sql for _ in self._list])
-            return f"{self.left.unindented_sql()} {self.op_str} ({resolved_str})"
-        
     def tokens(self) -> List[str]:
         if self.is_query:
             return [*self.left.tokens(), self.op_str, '(' ,*self.query.tokens(), ')']
@@ -202,9 +184,6 @@ class Between(LogicalOperationExpression):
     @property
     def op_str(self) -> str:
         return "BETWEEN"
-    
-    def unindented_sql(self) -> str:
-        return f"{self.left.unindented_sql()} {self.op_str} {self.from_.unindented_sql()} AND {self.to.unindented_sql()}"
     
     def tokens(self) -> List[str]:
         return [*self.left.tokens(), self.op_str, *self.from_.tokens(), 'AND', *self.to.tokens()]

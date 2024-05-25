@@ -62,9 +62,6 @@ class QueryExpression(Queryable):
             self.order_by_clause,
             self.limit_clause]
     
-    def unindented_sql(self) -> str:
-        return '\n'.join([_.unindented_sql() for _ in self.clause_ordering() if _ is not None])
-    
     def tokens(self) -> List[str]:
         result = []
         for clause in self.clause_ordering():

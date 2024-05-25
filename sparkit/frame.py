@@ -7,6 +7,7 @@ from sparkit.expression.clause import *
 from sparkit.expression.join import *
 from sparkit.expression.set_operation import *
 from sparkit.column import Column
+from sparkit.render import Renderable
 
 
 def copy_doc(source, preamble: Optional[str]=None):
@@ -358,7 +359,7 @@ class Frame:
         return self._set_operation(other=other, operation=ExceptSetOperation)
 
     @property
-    def sql(self) -> str:
+    def sql(self) -> Renderable:
         return self._query_expr.sql
     
 class GroupByFrame:

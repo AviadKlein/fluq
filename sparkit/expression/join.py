@@ -111,11 +111,6 @@ class JoinOperationExpression(Expression):
         else:
             raise TypeError()       
 
-    def unindented_sql(self) -> str:
-        left = self.resolve_sql("left")
-        right = self.resolve_sql("right")
-        return f"{left} {self.operator()} {right}{self.on_clause()}"
-    
     def resolve_tokens(self, side: str):
         match side:
             case "left":

@@ -50,5 +50,5 @@ class TestOperator(TestCase):
             select_clause=SelectClauseExpression([ColumnExpression("id")], [None])
             )
         expr = In(ColumnExpression("a"), query)
-        expected = "a IN ( SELECT id\nFROM db.schema.table1 )"
+        expected = "a IN ( SELECT id FROM db.schema.table1 )"
         self.assertEqual(expr.sql, expected)
