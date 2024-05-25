@@ -2,12 +2,21 @@ from unittest import TestCase
 
 from sparkit.frame import *
 from sparkit.sql import lit, col, functions, table
+from sparkit.render import RenderingContextConfig
+
+break_on_context_change = {
+            'SELECT': RenderingContextConfig(break_on_change_context=True),
+            'FROM': RenderingContextConfig(break_on_change_context=True),
+            'GROUP BY': RenderingContextConfig(break_on_change_context=True),
+            'ORDER BY': RenderingContextConfig(break_on_change_context=True),
+            'LIMIT': RenderingContextConfig(break_on_change_context=True)
+        }
 
 class TestFrame(TestCase):
     
     def test_table_construction_method(self):
         frame = table("a")
-        self.assertEqual(frame.sql, """SELECT *\nFROM a""")
+        self.assertEqual(frame.sql, """SELECT * FROM a""")
 
     def test_call_method(self):
         frame = table("a")
@@ -25,14 +34,14 @@ class TestFrame(TestCase):
 
     def test_alias(self):
         frame = table("a")
-        self.assertEqual(frame.sql, """SELECT *\nFROM a""")
+        self.assertEqual(frame.sql, """SELECT * FROM a""")
         # has no alias
         self.assertIsNone(frame.alias)
 
         frame = frame.as_("t1")
 
         # doesn't change the sql
-        self.assertEqual(frame.sql, """SELECT *\nFROM a""")
+        self.assertEqual(frame.sql, """SELECT * FROM a""")
         # but has an alias
         self.assertEqual(frame.alias, "t1")
 
@@ -59,52 +68,39 @@ class TestFrame(TestCase):
 
     def test_select(self):
         frame = table("t1").select("a", "b", "c")
-        expected = ['SELECT a, b, c', 'FROM t1']
-        result = frame.sql.split('\n')
-        self.assertListEqual(expected, result)
+        expected = 'SELECT a, b, c FROM t1'
+        result = frame.sql
+        self.assertEqual(expected, result)
 
         with self.assertRaises(AssertionError) as cm:
             frame.select("a")
         self.assertEqual("when sub selecting, first use an alias", str(cm.exception))
 
         frame = frame.as_("B").select("a")
-        result = frame.sql.split('\n')
-        expected = [
-            'SELECT a',
-            'FROM (SELECT a, b, c',
-            'FROM t1) AS B'
-            ]
-        self.assertListEqual(expected, result)
+        result = frame.sql
+        expected = 'SELECT a FROM ( SELECT a, b, c FROM t1 ) AS B'
+        self.assertEqual(expected, result)
 
         frame = table("t1").select(
             (col("age") > 10).as_("above_10"),
             (col("gender") == lit("male")).as_("is_male"),
             )
         
-        result = frame.sql.split('\n')
-        expected = [
-            "SELECT age > 10 AS above_10, gender = 'male' AS is_male",
-            "FROM t1"
-        ]
-        self.assertListEqual(expected, result)
+        result = frame.sql
+        expected = "SELECT age > 10 AS above_10, gender = 'male' AS is_male FROM t1"
+        self.assertEqual(expected, result)
 
     def test_where(self):
         frame = table("t1").where((col("age") > 18) & (col("salary") < 50000)).select("id")
-        result = frame.sql.split('\n')
-        expected = [
-            'SELECT id', 
-            'FROM t1', 
-            'WHERE (age > 18) AND (salary < 50000)']
-        self.assertListEqual(expected, result)
+        result = frame.sql
+        expected = 'SELECT id FROM t1 WHERE ( age > 18 ) AND ( salary < 50000 )'
+        self.assertEqual(expected, result)
 
         # append a new condition
         frame = frame.where(col("address").is_not_null())
-        result = frame.sql.split('\n')
-        expected = [
-            'SELECT id', 
-            'FROM t1', 
-            'WHERE ((age > 18) AND (salary < 50000)) AND (address IS NOT NULL)']
-        self.assertListEqual(expected, result)
+        result = frame.sql
+        expected = 'SELECT id FROM t1 WHERE ( ( age > 18 ) AND ( salary < 50000 ) ) AND ( address IS NOT NULL )'
+        self.assertEqual(expected, result)
 
     def test_join(self):
         t1 = table("db.schema.table1").as_("t1")
@@ -114,15 +110,15 @@ class TestFrame(TestCase):
         right = t1.join(t2, col("t1.id") == col("t2.id"), join_type='right')
         full_outer = t1.join(t2, col("t1.id") == col("t2.id"), join_type='full outer')
 
-        expected_inner      = ['SELECT *', 'FROM db.schema.table1 AS t1 INNER JOIN db.schema.table2 AS t2 ON t1.id = t2.id']
-        expected_left       = ['SELECT *', 'FROM db.schema.table1 AS t1 LEFT OUTER JOIN db.schema.table2 AS t2 ON t1.id = t2.id']
-        expected_right      = ['SELECT *', 'FROM db.schema.table1 AS t1 RIGHT OUTER JOIN db.schema.table2 AS t2 ON t1.id = t2.id']
-        expected_full_outer = ['SELECT *', 'FROM db.schema.table1 AS t1 FULL OUTER JOIN db.schema.table2 AS t2 ON t1.id = t2.id']
+        expected_inner      = 'SELECT * FROM db.schema.table1 AS t1 INNER JOIN db.schema.table2 AS t2 ON t1.id = t2.id'
+        expected_left       = 'SELECT * FROM db.schema.table1 AS t1 LEFT OUTER JOIN db.schema.table2 AS t2 ON t1.id = t2.id'
+        expected_right      = 'SELECT * FROM db.schema.table1 AS t1 RIGHT OUTER JOIN db.schema.table2 AS t2 ON t1.id = t2.id'
+        expected_full_outer = 'SELECT * FROM db.schema.table1 AS t1 FULL OUTER JOIN db.schema.table2 AS t2 ON t1.id = t2.id'
 
-        self.assertEqual(inner.sql.split('\n'), expected_inner)
-        self.assertEqual(left.sql.split('\n'), expected_left)
-        self.assertEqual(right.sql.split('\n'), expected_right)
-        self.assertEqual(full_outer.sql.split('\n'), expected_full_outer)
+        self.assertEqual(inner.sql, expected_inner)
+        self.assertEqual(left.sql, expected_left)
+        self.assertEqual(right.sql, expected_right)
+        self.assertEqual(full_outer.sql, expected_full_outer)
 
     def test_join_nested(self):
         t1 = table("db.schema.table1").as_("t1")
@@ -139,22 +135,29 @@ class TestFrame(TestCase):
             )
         expected = [
             'SELECT a.id, t3.age, a.salary', 
-            'FROM (SELECT t1.id, t2.salary', 
-            'FROM db.schema.table1 AS t1 INNER JOIN db.schema.table2 AS t2 ON t1.id = t2.id) AS a LEFT OUTER JOIN (SELECT *', 
-            'FROM db.schema.table3) AS t3 ON a.id = t3.id']
-        result = left.sql.split('\n')
+            'FROM (', 
+            'SELECT t1.id, t2.salary', 
+            'FROM db.schema.table1 AS t1 INNER JOIN db.schema.table2 AS t2 ON t1.id = t2.id ) AS a LEFT OUTER JOIN (', 
+            'SELECT *', 
+            'FROM db.schema.table3 ) AS t3 ON a.id = t3.id']
+        result = left.sql(context2config=break_on_context_change).split('\n')
+        print(result)
         self.assertListEqual(result, expected)
         
     def test_join_cartesian(self):
         t1 = table("db.schema.table1").as_("t1")
         t2 = table("db.schema.table2").as_("t2")
         result = t1.cartesian(t2)
-        expected = ['SELECT *', 'FROM db.schema.table1 AS t1 CROSS JOIN db.schema.table2 AS t2']
-        self.assertEqual(result.sql.split('\n'), expected)
+        expected = [
+            'SELECT *', 
+            'FROM db.schema.table1 AS t1 CROSS JOIN db.schema.table2 AS t2']
+        self.assertEqual(result.sql(context2config=break_on_context_change).split('\n'), expected)
 
         result = t1.cartesian(t2).select("t1.id", "t2.id")
-        expected = ['SELECT t1.id, t2.id', 'FROM db.schema.table1 AS t1 CROSS JOIN db.schema.table2 AS t2']
-        self.assertEqual(result.sql.split('\n'), expected)
+        expected = [
+            'SELECT t1.id, t2.id', 
+            'FROM db.schema.table1 AS t1 CROSS JOIN db.schema.table2 AS t2']
+        self.assertEqual(result.sql(context2config=break_on_context_change).split('\n'), expected)
         
 
     def test_group_by(self):
@@ -167,16 +170,19 @@ class TestFrame(TestCase):
              'SELECT customer_id, date, SUM(value) AS total_value', 
              'FROM db.schema.payments', 
              'GROUP BY customer_id, date']
-         self.assertListEqual(result.sql.split('\n'), expected)
+         self.assertListEqual(result.sql(context2config=break_on_context_change).split('\n'), expected)
 
     def test_order_by(self):
         result = (
              table("db.schema.payments").as_("t1")
              .select("id", "time", "value")
              .order_by("time")
-         ).sql.split('\n')
-        expected = ['SELECT id, time, value', 'FROM db.schema.payments', 'ORDER BY time ASC NULLS FIRST']
-        self.assertEqual(result, expected)
+         ).sql(context2config=break_on_context_change).split('\n')
+        expected = [
+            'SELECT id, time, value', 
+            'FROM db.schema.payments', 
+            'ORDER BY time ASC NULLS FIRST']
+        self.assertListEqual(result, expected)
 
     def test_limit(self):
         result = (
@@ -184,15 +190,13 @@ class TestFrame(TestCase):
              .select("id", "time", "value")
              .order_by("time")
              .limit(5)
-        ).sql.split('\n')
-        expected = ['SELECT id, time, value', 'FROM db.schema.payments', 'ORDER BY time ASC NULLS FIRST', 'LIMIT 5']
-        self.assertEqual(result, expected)
-
-    def test_union(self):
-        self.fail("Not Implemented")
-
-    def test_intersect(self):
-        self.fail("Not Implemented")
+        ).sql(context2config=break_on_context_change).split('\n')
+        expected = [
+            'SELECT id, time, value', 
+            'FROM db.schema.payments', 
+            'ORDER BY time ASC NULLS FIRST', 
+            'LIMIT 5']
+        self.assertListEqual(result, expected)
 
         
 

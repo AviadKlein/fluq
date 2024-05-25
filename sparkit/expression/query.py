@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from abc import abstractmethod
+
 from dataclasses import dataclass
 from typing import Optional, List
 
-from sparkit.expression.base import QueryAble
+from sparkit.expression.base import Queryable
 from sparkit.expression.clause import FromClauseExpression, WhereClauseExpression, \
     GroupByClauseExpression, SelectClauseExpression, HavingClauseExpression, QualifyClauseExpression, \
-    OrderByClauseExpression, LimitClauseExpression
+    OrderByClauseExpression, LimitClauseExpression, ClauseExpression
 
 @dataclass
-class QueryExpression(QueryAble):
+class QueryExpression(Queryable):
     from_clause: Optional[FromClauseExpression]=None
     where_clause: Optional[WhereClauseExpression]=None
     group_by_clause: Optional[GroupByClauseExpression]=None
@@ -51,7 +51,7 @@ class QueryExpression(QueryAble):
             limit_clause = self.limit_clause if limit_clause is None else limit_clause
         )
 
-    def clause_ordering(self) -> List:
+    def clause_ordering(self) -> List[ClauseExpression]:
         return [
             self.select_clause,
             self.from_clause, 
@@ -62,8 +62,12 @@ class QueryExpression(QueryAble):
             self.order_by_clause,
             self.limit_clause]
     
-    def unindented_sql(self) -> str:
-        return '\n'.join([_.unindented_sql() for _ in self.clause_ordering() if _ is not None])
+    def tokens(self) -> List[str]:
+        result = []
+        for clause in self.clause_ordering():
+            if clause is not None:
+                result = [*result, *clause.tokens()]
+        return result
     
     def is_simple(self) -> bool:
         """a simple query is the following pattern: SELECT * FROM [TABLE]"""
@@ -79,7 +83,8 @@ class QueryExpression(QueryAble):
         return all(cond)
     
 
-class UnionQueryExpression(QueryAble):
 
-    def __init__(self, a: QueryExpression, b: QueryExpression):
-        raise NotImplementedError()
+
+    
+
+    

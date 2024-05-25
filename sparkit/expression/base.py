@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+from sparkit.render import Renderable
+
 from typing import List, Tuple
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -50,52 +52,29 @@ class ValidName:
                     raise TypeError(f"illegal name, due to bad characters in these locations: {bad_chars}")
         self.name = self.remove_redundant_dots(self.name)
 
-
-# Indentation and formatting
-@dataclass
-class Indent:
-    """class to hold instructions for indentation"""
-    indents: int = 0
-    indent_str: str = '\t'
-
-    def render(self) -> str:
-        return f"{self.indent_str*self.indents}"
-    
-    def __str__(self) -> str:
-        return self.render()
-    
-    def plus1(self) -> Indent:
-        return Indent(self.indents+1, self.indent_str)
-
-
 # TODO - refactor expressions as dataclass wherever possible
-# TODO - add a depth int to all expressions for more sophisticated rendering 
-    # Rendering should be controlled by a Style object, that has a default.
-
 # Expressions
 class Expression(ABC):
     """This is the basic workhorse
     expressions 'sql' themselves and can hold other expressions"""
 
-    @abstractmethod
-    def unindented_sql(self) -> str:
-        pass
-
     @property
-    def sql(self, indent: Indent = Indent()) -> str:
-        return f"{indent}{self.unindented_sql()}"
-    
-    def __eq__(self, __value: object) -> bool:
-        cond = (self.__class__.__name__ == __value.__class__.__name__)
-        cond &= isinstance(__value, Expression)
-        cond &= self.unindented_sql() == __value.unindented_sql()
-        if cond:
-            return True
-        else:
-            return False
+    def sql(self) -> Renderable:
+        return Renderable(tokens=self.tokens())
         
     def __hash__(self) -> int:
-        return hash(self.__class__.__name__ + self.unindented_sql())
+        return hash(self.__class__.__name__ + ''.join(self.tokens()))
+    
+    def __eq__(self, __value: object) -> bool:
+        match __value:
+            case Expression():
+                return hash(self) == hash(__value)
+            case _:
+                return False
+    
+    @abstractmethod
+    def tokens(self) -> List[str]:
+        pass
     
 
 class AnyExpression(Expression):
@@ -104,8 +83,8 @@ class AnyExpression(Expression):
     def __init__(self, expr: str):
         self.expr = expr
 
-    def unindented_sql(self) -> str:
-        return self.expr
+    def tokens(self) -> List[str]:
+        return [self.expr]
     
     
 class TableNameExpression(Expression):
@@ -116,16 +95,8 @@ class TableNameExpression(Expression):
             db_path = ValidName(db_path)
         self.db_path = db_path
 
-    def unindented_sql(self) -> str:
-        return self.db_path.name
-
-
-
-# class ToLogicalMixin(Expression):
-#     """a mixin to turn a logical or math or just a pointer or literal into a logical expression"""
-
-#     def to_logical(self) -> LogicalOperationExpression:
-#         return IsNotNull(self)
+    def tokens(self) -> List[str]:
+        return [self.db_path.name]
 
 
 class ColumnExpression(Expression):
@@ -141,8 +112,8 @@ class ColumnExpression(Expression):
     def name(self) -> str:
         return "*" if self._name == "*" else self._name.name
     
-    def unindented_sql(self) -> str:
-        return self.name
+    def tokens(self) -> List[str]:
+        return [self.name]
 
 
 LiteralTypes = int | float | bool | str
@@ -161,10 +132,10 @@ class LiteralExpression(Expression):
             self.sql_value = str(value)
         else:
             raise TypeError()
-
-
-    def unindented_sql(self) -> str:
-        return self.sql_value
+    
+    def tokens(self) -> str:
+        return [self.sql_value]
+    
     
 class NegatedExpression(Expression):
     """negate an expression"""
@@ -172,16 +143,17 @@ class NegatedExpression(Expression):
     def __init__(self, expr: Expression) -> None:
         assert isinstance(expr, Expression)
         self.expr = expr
-
-    def unindented_sql(self) -> str:
-        return f"-{self.expr.unindented_sql()}"
+    
+    def tokens(self) -> List[str]:
+        head, *tail = self.expr.tokens()
+        return [f'-{head}', *tail]
 
 
 class NullExpression(Expression):
     """a special expression for the NULL value"""
-
-    def unindented_sql(self) -> str:
-        return "NULL"
+    
+    def tokens(self) -> List[str]:
+        return ["NULL"]
 
 
 @dataclass
@@ -192,20 +164,12 @@ class OrderBySpecExpression(Expression):
     def __post_init__(self):
         assert isinstance(self.asc, bool)
         assert isinstance(self.nulls, str) and self.nulls in ("FIRST", "LAST")
-
-    def unindented_sql(self) -> str:
+    
+    def tokens(self) -> List[str]:
         result = "ASC" if self.asc else "DESC"
         result += f" NULLS {self.nulls}"
-        return result
+        return [result]
     
-class QueryAble(Expression):
     
-    @abstractmethod
-    def copy(self):
-        pass
-    
-                
-
-
-                        
-        
+class Queryable(Expression):
+    pass

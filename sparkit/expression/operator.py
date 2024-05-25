@@ -1,7 +1,10 @@
+from dataclasses import dataclass
 from abc import abstractmethod
+from typing import List
 
-from sparkit.expression.base import Expression, LiteralTypes, LiteralExpression, NullExpression, QueryAble
+from sparkit.expression.base import Expression, LiteralTypes, LiteralExpression, NullExpression, Queryable
 
+@dataclass
 class AbstractOperationExpression(Expression):
     """an expression to denote an operation between 2 expressions
     this is supposed to serve:
@@ -12,12 +15,12 @@ class AbstractOperationExpression(Expression):
 
     etc.
     """
+    left: Expression
+    right: Expression
     
-    def __init__(self, left: Expression, right: Expression):
-        assert isinstance(left, Expression)
-        assert isinstance(right, Expression)
-        self.left = left
-        self.right = right
+    def __post_init__(self):
+        assert isinstance(self.left, Expression)
+        assert isinstance(self.right, Expression)
     
     @property
     def _wrap_left(self) -> bool:
@@ -33,17 +36,20 @@ class AbstractOperationExpression(Expression):
     def op_str(self) -> str:
         """the string that will be presented in the SQL str"""
         pass
-
-    def unindented_sql(self) -> str:
-        """the SQL str"""
-        _left = self.left.unindented_sql()
+    
+    def tokens(self) -> List[str]:
+        _left: List[str] = self.left.tokens()
         if self._wrap_left:
-            _left = f"({_left})"
+            _left = ['(',*_left,')']
         
-        _right = self.right.unindented_sql()
+        _right: List[str] = self.right.tokens()
         if self._wrap_right:
-            _right = f"({_right})"
-        return f"{_left} {self.op_str} {_right}"
+            _right = ['(',*_right,')']
+        
+        return [*_left, self.op_str, *_right]
+
+    def __hash__(self) -> int:
+        return hash(self.__class__.__name__ + ''.join(self.tokens()))
 
 
 class LogicalOperationExpression(AbstractOperationExpression):
@@ -100,13 +106,13 @@ class LessOrEqual(LogicalOperationExpression):
 class In(LogicalOperationExpression):
 
     def __init__(self, left: Expression, 
-                 *args: Expression | LiteralTypes | QueryAble):
+                 *args: Expression | LiteralTypes | Queryable):
         assert isinstance(left, Expression)
         self.left = left
         self.is_query = False
 
         # assert only 1 QueryExpression
-        _num_queries = sum([1 for _ in args if isinstance(_, QueryAble)])
+        _num_queries = sum([1 for _ in args if isinstance(_, Queryable)])
         assert _num_queries <= 1
 
         if _num_queries == 1:
@@ -129,12 +135,16 @@ class In(LogicalOperationExpression):
     def op_str(self) -> str:
         return "IN"
 
-    def unindented_sql(self) -> str:
+    def tokens(self) -> List[str]:
         if self.is_query:
-            return f"{self.left.unindented_sql()} {self.op_str} ( {self.query.sql} )"
+            return [*self.left.tokens(), self.op_str, '(' ,*self.query.tokens(), ')']
         else:
-            resolved_str = ', '.join([_.sql for _ in self._list])
-            return f"{self.left.unindented_sql()} {self.op_str} ({resolved_str})"
+            resolved_tokens = [_.tokens() for _ in self._list]
+            resolved_tokens = [elem for lst in resolved_tokens for elem in lst]
+            last_token = resolved_tokens[-1]
+            zipped = zip(resolved_tokens[:-1], [',']*(len(resolved_tokens)-1))
+            resolved_tokens = [elem for pair in zipped for elem in pair] + [last_token]
+            return [*self.left.tokens(), self.op_str, '(', *resolved_tokens, ')']
     
 class Not(NotEqual):
 
@@ -159,8 +169,9 @@ class IsNotNull(NotEqual):
     @property
     def op_str(self) -> str:
         return "IS NOT"
-    
+
 class Between(LogicalOperationExpression):
+
 
     def __init__(self, left: Expression, from_: Expression, to: Expression):
         assert isinstance(left, Expression)
@@ -174,8 +185,8 @@ class Between(LogicalOperationExpression):
     def op_str(self) -> str:
         return "BETWEEN"
     
-    def unindented_sql(self) -> str:
-        return f"{self.left.unindented_sql()} {self.op_str} {self.from_.unindented_sql()} AND {self.to.unindented_sql()}"
+    def tokens(self) -> List[str]:
+        return [*self.left.tokens(), self.op_str, *self.from_.tokens(), 'AND', *self.to.tokens()]
     
 class And(LogicalOperationExpression):
 

@@ -1,5 +1,4 @@
 from unittest import TestCase
-import textwrap
 
 from sparkit.expression.base import *
 from sparkit.expression.function import *
@@ -13,6 +12,7 @@ class TestFunction(TestCase):
 
         result = functions.FunctionExpressionMOD(X=LiteralExpression(5), Y=LiteralExpression(3))
         self.assertEqual(result.sql, "MOD(5, 3)")
+        self.assertEqual(result.tokens(), ["MOD(5, 3)"])
 
     def test_empty_case_expression(self):
         case = CaseExpression([])
@@ -31,14 +31,9 @@ class TestFunction(TestCase):
                 .add(Equal(ColumnExpression("a"), LiteralExpression(1)), LiteralExpression("good"))
                 .add(Equal(ColumnExpression("a"), LiteralExpression(0)), LiteralExpression("bad"))
         )
-
-        expected = textwrap.dedent("""\
-        CASE
-        \tWHEN a = 1 THEN 'good'
-        \tWHEN a = 0 THEN 'bad'
-        END""")
+        expected = ['CASE', 'WHEN', 'a', '=', '1', 'THEN', "'good'", 'WHEN', 'a', '=', '0', 'THEN', "'bad'", "END"]
         
-        self.assertMultiLineEqual(case.sql, expected)
+        self.assertListEqual(case.tokens(), expected)
 
         case = (
             CaseExpression([])
@@ -47,11 +42,6 @@ class TestFunction(TestCase):
                 .add_otherwise(LiteralExpression("dunno"))
         )
 
-        expected = textwrap.dedent("""\
-        CASE
-        \tWHEN a = 1 THEN 'good'
-        \tWHEN a = 0 THEN 'bad'
-        \tELSE 'dunno'
-        END""")
+        expected = ['CASE', 'WHEN', 'a', '=', '1', 'THEN', "'good'", 'WHEN', 'a', '=', '0', 'THEN', "'bad'", "ELSE", "'dunno'", 'END']
         
-        self.assertMultiLineEqual(case.sql, expected)
+        self.assertListEqual(case.tokens(), expected)

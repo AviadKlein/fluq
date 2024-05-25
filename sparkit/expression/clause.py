@@ -25,12 +25,12 @@ class SelectClauseExpression(ClauseExpression):
             self.aliases.append(alias)
 
     @property
-    def _has_star(self) -> bool:
+    def _has_wilcard(self) -> bool:
         return ColumnExpression("*") in self.expressions
     
     def is_select_all(self) -> bool:
         cond = len(self.expressions) == 1
-        cond &= self._has_star
+        cond &= self._has_wilcard
         return cond
 
     def _resolve_arg(self, arg: SelectableExpressionType | Tuple[SelectableExpressionType, Optional[ValidName | str]]) -> Tuple[SelectableExpressionType, Optional[ValidName | str]]:
@@ -38,7 +38,7 @@ class SelectClauseExpression(ClauseExpression):
             if not isinstance(arg, self.allowed_expression_types()):
                 raise TypeError(f"expr type is not supported, got: {type(arg)}, expected: [{self.allowed_expression_types()}]")
             if arg == ColumnExpression("*"):
-                assert not self._has_star, """can only have 1 ColumnExpression("*")"""
+                assert not self._has_wilcard, """can only have 1 ColumnExpression("*")"""
             return arg, None
         elif isinstance(arg, tuple):
             assert len(arg) == 2
@@ -54,13 +54,12 @@ class SelectClauseExpression(ClauseExpression):
             if expr == ColumnExpression("*"):
                 if optional_alias is not None:
                     raise AssertionError(f"""ColumnExpression("*") can't have an alias, got '{optional_alias.name}'""")
-                elif self._has_star:
+                elif self._has_wilcard:
                     raise AssertionError("""can only have 1 ColumnExpression("*")""")
             
             return expr, optional_alias
-            
 
-    
+
     def add(self, expression: SelectableExpressionType, alias: Optional[ValidName | str]=None) -> SelectClauseExpression:
         expr, optional_alias = self._resolve_arg((expression, alias))
 
@@ -98,12 +97,25 @@ class SelectClauseExpression(ClauseExpression):
     def wildcard(cls) -> SelectClauseExpression:
         return SelectClauseExpression([ColumnExpression("*")], [None])
 
+    def resolve_expr_tokens_and_alias(self, expr: Expression, alias: Optional[ValidName]):
+        expr = expr.tokens()
+        if alias is not None:
+            expr = [*expr, 'AS', alias.name]
+        return expr
 
-    def unindented_sql(self) -> str:
-        z = zip(self.expressions, self.aliases)
-        f = lambda expr, alias: f"{expr.sql}" + ("" if alias is None else f" AS {alias.name}")
-        exprs = ', '.join([f(expr, alias) for expr, alias in z])
-        return f"SELECT {exprs}"
+    def tokens(self) -> List[str]:
+        z = list(zip(self.expressions, self.aliases))
+        exprs = []
+        for element in [self.resolve_expr_tokens_and_alias(expr, alias) for expr, alias in z]:
+            if isinstance(element, list):
+                exprs = [*exprs, ',' ,*element]
+            else:
+                exprs.append(',', element)
+                exprs.append(element)
+        if exprs[0] == ',':
+            exprs = exprs[1:]
+        return ['SELECT', *exprs]
+
     
 class FromClauseExpression(ClauseExpression):
     """an Expression to hold the From clause
@@ -163,7 +175,7 @@ class FromClauseExpression(ClauseExpression):
                     case ('query', 'alias'):
                         query = kwargs[key1]
                         alias = kwargs[key2]
-                        assert isinstance(query, QueryAble)
+                        assert isinstance(query, Queryable)
                         assert isinstance(alias, str)
                         self._alias = ValidName(alias)
                         self.from_item = query
@@ -249,14 +261,13 @@ class FromClauseExpression(ClauseExpression):
         """a simple from clause point to 1 table only"""
         return isinstance(self.from_item, TableNameExpression)
     
-    def unindented_sql(self) -> str:
-        # resolve item:
-        from_item_str = self.from_item.unindented_sql()
-        if isinstance(self.from_item, QueryAble):
-            from_item_str = f"({from_item_str})"
+    def tokens(self) -> List[str]:
+        from_item_tkns = self.from_item.tokens()
+        if isinstance(self.from_item, Queryable):
+            from_item_tkns = ['(',*from_item_tkns,')']
         if self.alias is not None:
-            from_item_str = f"{from_item_str} AS {self.alias}"
-        return f"FROM {from_item_str}"
+            from_item_tkns = [*from_item_tkns, 'AS', self.alias]
+        return ['FROM', *from_item_tkns]
 
 
 class PredicateClauseExpression(ClauseExpression):
@@ -280,8 +291,8 @@ class PredicateClauseExpression(ClauseExpression):
     def clause_symbol(self) -> str:
         pass
     
-    def unindented_sql(self) -> str:
-        return f"{self.clause_symbol()} {self.predicate.unindented_sql()}"
+    def tokens(self) -> List[str]:
+        return [self.clause_symbol(), *self.predicate.tokens()]
     
     
 
@@ -305,29 +316,16 @@ class QualifyClauseExpression(PredicateClauseExpression):
 
 class GroupByClauseExpression(ClauseExpression):
 
-    def __init__(self, *groupable_items: SelectableExpressionType | int):
+    def __init__(self, *groupable_items: SelectableExpressionType):
         groupable_items = list(groupable_items)
         if len(groupable_items) != len(set(groupable_items)):
             raise TypeError("got duplicates in grouping items")
         # check types
         all_are_expressions = all([isinstance(_, self.allowed_expression_types()) for _ in groupable_items])
-        all_are_ints = all([isinstance(_, int) for _ in groupable_items])
-        type_condition = all_are_expressions
-        type_condition |= all_are_ints
-        if not type_condition:
+        if not all_are_expressions:
             raise TypeError("expressions can only be list[int] or list[SelectableExpressionType]")
         
-        self._expressions = None
-        self._positionals = None
-
-        if all_are_expressions:
-            self.is_positional = False
-            self._expressions = groupable_items
-        else:
-            self.is_positional = True
-            if not all([_ > 0 for _ in groupable_items]):
-                raise TypeError("can't have non-positive positional grouping items")
-            self._positionals = groupable_items
+        self._expressions = groupable_items
 
     @staticmethod
     def allowed_expression_types():
@@ -340,45 +338,38 @@ class GroupByClauseExpression(ClauseExpression):
             CaseExpression,
             AbstractFunctionExpression])
     
-    def unindented_sql(self) -> str:
-        gi_str = [str(_) for _ in self._positionals] if self.is_positional \
-            else [_.unindented_sql() for _ in self._expressions]
-        gi_str = ', '.join(gi_str)
-        return f"GROUP BY {gi_str}"
+    def tokens(self) -> List[str]:
+        if len(self._expressions) == 1:
+            gi_tkns = self._expressions[0].tokens()
+        else:
+            gi_tkns = self._expressions[0].tokens()
+            for tokens in [_.tokens() for _ in self._expressions[1:]]:
+                gi_tkns = [*gi_tkns, ',' ,*tokens]
+        return ['GROUP BY', *gi_tkns]
 
 class OrderByClauseExpression(ClauseExpression):
 
-    def __init__(self, *ordering_items: SelectableExpressionType | Tuple[SelectableExpressionType, OrderBySpecExpression] | int):
+    def __init__(self, *ordering_items: SelectableExpressionType | Tuple[SelectableExpressionType, OrderBySpecExpression]):
         ordering_items = list(ordering_items)
-        all_ints = all([isinstance(_, int) for _ in ordering_items])
         all_expressions_or_tuples = all([isinstance(_, (tuple, *self.allowed_expression_types())) for _ in ordering_items])
-        if not (all_ints or all_expressions_or_tuples):
-            raise TypeError("input can be either list of ints or a list with arguments that are either SelectableExpressionType or Tuple[SelectableExpressionType, OrderBySpecExpression]")
+        if not all_expressions_or_tuples:
+            raise TypeError("input must be a list with arguments that are either SelectableExpressionType or Tuple[SelectableExpressionType, OrderBySpecExpression]")
         
-        if all_ints:
-            self.is_positional = True
-            if not all([_ > 0 for _ in ordering_items]):
-                raise TypeError("can't have non-positive positional ordering items")
-            if len(ordering_items) != len(set(ordering_items)):
-                raise TypeError("duplicate ordering items")
-            self._positionals = ordering_items
-        else:
-            self.is_positional = False
-            self._expressions = []
-            for arg in ordering_items:
-                if isinstance(arg, self.allowed_expression_types()):
-                    self._expressions.append((arg, OrderBySpecExpression()))
-                elif isinstance(arg, tuple):
-                    assert len(arg) == 2
-                    expr, orderbyspec = arg
-                    assert isinstance(expr, self.allowed_expression_types())
-                    assert isinstance(orderbyspec, OrderBySpecExpression)
-                    self._expressions.append((expr, orderbyspec))
-                else:
-                    TypeError()
-            _keys = [_[0] for _ in self._expressions]
-            if len(_keys) != len(set(_keys)):
-                raise TypeError("duplicate ordering items")
+        self._expressions = []
+        for arg in ordering_items:
+            if isinstance(arg, self.allowed_expression_types()):
+                self._expressions.append((arg, OrderBySpecExpression()))
+            elif isinstance(arg, tuple):
+                assert len(arg) == 2
+                expr, orderbyspec = arg
+                assert isinstance(expr, self.allowed_expression_types())
+                assert isinstance(orderbyspec, OrderBySpecExpression)
+                self._expressions.append((expr, orderbyspec))
+            else:
+                TypeError()
+        _keys = [_[0] for _ in self._expressions]
+        if len(_keys) != len(set(_keys)):
+            raise TypeError("duplicate ordering items")
 
 
     @staticmethod
@@ -389,22 +380,23 @@ class OrderByClauseExpression(ClauseExpression):
             NullExpression, 
             LogicalOperationExpression, 
             MathOperationExpression, 
-            CaseExpression])
+            CaseExpression, 
+            AnalyticFunctionExpression])
     
-    def resolve_positional_sql(self) -> str:
-            return ', '.join([str(_) for _ in self._positionals])
-
-        
     def resolve_expression_sql(self) -> str:
         result = []
         for expr, orderbyspec in self._expressions:
             result.append(f"{expr.unindented_sql()} {orderbyspec.unindented_sql()}")
         return ', '.join(result)
     
-    def unindented_sql(self) -> str:
-        items_str = self.resolve_positional_sql() if self.is_positional \
-            else self.resolve_expression_sql()
-        return f"ORDER BY {items_str}"
+    def tokens(self) -> List[str]:
+        head, *tail = self._expressions
+        e, o = head
+        result = [*e.tokens(), *o.tokens()]
+        for expr, obs in tail:
+            result = [*result, ',', *expr.tokens(), *obs.tokens()]
+      
+        return ['ORDER BY', *result]
 
 
 class LimitClauseExpression(ClauseExpression):
@@ -415,7 +407,7 @@ class LimitClauseExpression(ClauseExpression):
             assert offset > 0 and isinstance(offset, int)
         self.limit = limit
         self.offset = offset
-
-    def unindented_sql(self) -> str:
+    
+    def tokens(self) -> List[str]:
         _offset = "" if self.offset is None else f" OFFSET {self.offset}"
-        return f"LIMIT {self.limit}{_offset}"
+        return ['LIMIT', f"{self.limit}{_offset}"]
