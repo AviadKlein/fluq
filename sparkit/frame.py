@@ -105,13 +105,11 @@ class Frame:
             raise TypeError("only *args as all str OR all Column is supported")
         
         # resolve select clause
-        if len(args) == 1 and args[0] == "*":
-            select_clause = SelectClauseExpression.wildcard()
-        elif type_check_str:
+        if type_check_str:
             select_clause = SelectClauseExpression.from_args(*[(ColumnExpression(_), None) for _ in args])
         else:
             expressions = [_.expr for _ in args]
-            aliases = [_.alias for _ in args if _.alias is not None]
+            aliases = [_.alias for _ in args]
             select_clause = SelectClauseExpression(expressions, aliases)
         
         # check if current select clause is '*'

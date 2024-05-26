@@ -73,3 +73,22 @@ class TestExpression(TestCase):
         self.assertEqual(float_lit.tokens(), ["43.22"])
         self.assertEqual(float_lit2.tokens(), ["1000000.0"])
         self.assertEqual(str_lit.tokens(), ["'hello'"])
+
+    def test_any_expression_no_aliases(self):
+        with self.assertRaises(SyntaxError) as cm:
+            AnyExpression("c as b")
+        self.assertEqual("don't create aliases within AnyExpression", str(cm.exception))
+
+        with self.assertRaises(SyntaxError) as cm:
+            AnyExpression("c b")
+        self.assertEqual("don't create aliases within AnyExpression", str(cm.exception))
+
+        with self.assertRaises(SyntaxError) as cm:
+            AnyExpression("func(3,3) as f")
+        self.assertEqual("don't create aliases within AnyExpression", str(cm.exception))
+
+        # works fine
+        AnyExpression("c")
+        AnyExpression("func(3,3)")
+        AnyExpression("func(3, 3)")
+        

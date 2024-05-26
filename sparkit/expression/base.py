@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from sparkit.render import Renderable
 
-from typing import List, Tuple
-from abc import ABC, abstractmethod
+from typing import List, Tuple, Optional
+from abc import ABC, abstractmethod, abstractclassmethod
 from dataclasses import dataclass
 import string
 import re
@@ -81,6 +81,21 @@ class AnyExpression(Expression):
     """just in case you need to solve something"""
 
     def __init__(self, expr: str):
+        if not isinstance(expr, str):
+            raise TypeError(f"expr must by of type str, got {type(expr)}")
+        if len(expr) == 0:
+            raise SyntaxError("can't have empty expr")
+        
+        spl = expr.split(' ')
+        if len(spl) > 1:
+            if spl[-2].upper() == 'AS':
+                raise SyntaxError("don't create aliases within AnyExpression")
+            if spl[-2][-1] == ')':
+                raise SyntaxError("don't create aliases within AnyExpression")
+            if ')' in spl[-1]:
+                pass
+            if ')' not in expr:
+                raise SyntaxError("don't create aliases within AnyExpression")
         self.expr = expr
 
     def tokens(self) -> List[str]:
@@ -154,6 +169,91 @@ class NullExpression(Expression):
     
     def tokens(self) -> List[str]:
         return ["NULL"]
+
+class DateTimePart(Expression):
+    
+    @abstractclassmethod
+    def symbol(cls) -> str:
+        pass
+
+    def tokens(self) -> List[str]:
+        return [self.symbol()]
+
+class YearDateTimePart(DateTimePart):
+
+    @classmethod
+    def symbol(cls) -> str:
+        return "YEAR"
+    
+class QuarterDateTimePart(DateTimePart):
+
+    @classmethod
+    def symbol(cls) -> str:
+        return "QUARTER"
+    
+class MonthDateTimePart(DateTimePart):
+
+    @classmethod
+    def symbol(cls) -> str:
+        return "MONTH"
+    
+class WeekDateTimePart(DateTimePart):
+
+    @classmethod
+    def symbol(cls) -> str:
+        return "WEEK"
+    
+class DayDateTimePart(DateTimePart):
+
+    @classmethod
+    def symbol(cls) -> str:
+        return "DAY"
+    
+class HourDateTimePart(DateTimePart):
+
+    @classmethod
+    def symbol(cls) -> str:
+        return "HOUR"
+    
+class MinuteDateTimePart(DateTimePart):
+
+    @classmethod
+    def symbol(cls) -> str:
+        return "MINUTE"
+    
+class SecondDateTimePart(DateTimePart):
+
+    @classmethod
+    def symbol(cls) -> str:
+        return "SECOND"
+
+
+class IntervalLiteralExpression(Expression):
+
+    def __init__(self, duration: str | int, 
+                 datetime_part: DateTimePart, 
+                 convert_to: Optional[DateTimePart]=None):
+        assert isinstance(duration, str | int)
+        assert isinstance(datetime_part, DateTimePart)
+        if convert_to is not None:
+            assert isinstance(convert_to, DateTimePart)
+        self.duration = duration
+        self.datetime_part = datetime_part
+        self.convert_to = convert_to
+
+    def to(self, convert_to: DateTimePart) -> IntervalLiteralExpression:
+        if self.convert_to is not None:
+            raise Exception()
+        else:
+            return IntervalLiteralExpression(self.duration, self.datetime_part, convert_to)
+
+    def tokens(self) -> List[str]:
+        resolved_duration = f"'{self.duration}'" if isinstance(self.duration, str) else str(self.duration)
+        result = ['INTERVAL', resolved_duration, *self.datetime_part.tokens()]
+        if self.convert_to is not None:
+            result = [*result, 'TO', *self.convert_to.tokens()]
+        return result
+
 
 
 @dataclass

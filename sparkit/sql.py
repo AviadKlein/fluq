@@ -19,6 +19,19 @@ def lit(value: int | float | str | bool) -> Column:
     expr = LiteralExpression(value)
     return Column(expression=expr, alias=None)
 
+def interval(duration: str | int) -> Column.IntervalLiteralConstructor:
+    return Column.IntervalLiteralConstructor(duration=duration)
+
+def expr(expression: str) -> Column:
+    """in case sparkit does not support a specific function or a handler
+    one can use this method to create a Column holding an AnyExpression
+    no further logical checks will happen until the sql is used
+    
+    Raises:
+        SyntaxError - when trying to supply an alias"""
+
+    return Column(expression=AnyExpression(expr=expression), alias=None)
+
 def when(condition: Column, value: Any) -> Column:
     """
     Usage:

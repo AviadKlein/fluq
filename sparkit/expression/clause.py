@@ -16,7 +16,8 @@ class ClauseExpression(Expression):
 class SelectClauseExpression(ClauseExpression):
 
     def __init__(self, expressions: List[SelectableExpressionType], aliases: List[Optional[ValidName]]):
-        assert len(expressions) == len(aliases)
+        if len(expressions) != len(aliases):
+            raise TypeError(f"got differing length of expressions: {len(expressions)} and aliases: {len(aliases)}, inputs were: {expressions=} and {aliases=}")
         self.expressions = []
         self.aliases = []
         for arg in zip(expressions, aliases):
@@ -78,7 +79,8 @@ class SelectClauseExpression(ClauseExpression):
             MathOperationExpression, 
             CaseExpression,
             AbstractFunctionExpression,
-            AnalyticFunctionExpression])
+            AnalyticFunctionExpression,
+            AnyExpression])
 
     @classmethod
     def from_args(cls, *args: Tuple[SelectableExpressionType, Optional[ValidName]]) -> SelectClauseExpression:

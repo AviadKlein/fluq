@@ -10,7 +10,7 @@ from sparkit.expression.operator import *
 
 # Selectable types
 SelectableExpressionType = LiteralExpression | ColumnExpression | \
-    LogicalOperationExpression | MathOperationExpression | NullExpression
+    LogicalOperationExpression | MathOperationExpression | NullExpression | AnyExpression
 
 @dataclass
 class WindowFrameExpression(Expression):

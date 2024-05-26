@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Tuple
+from typing import Tuple, Any
 from sparkit.expression.base import *
 from sparkit.expression.function import *
 from sparkit.expression.operator import *
+from sparkit.expression.datatype import *
 
 _function_expressions = SQLFunctionExpressions()
 
@@ -56,7 +57,17 @@ class Column:
             AbstractOperationExpression, 
             AbstractFunctionExpression, 
             NegatedExpression,
-            AnalyticFunctionExpression)
+            AnalyticFunctionExpression,
+            AnyExpression,
+            IntervalLiteralExpression,
+            CastExpression)
+    
+    def _equals(self, other: Any) -> bool:
+        """this is a replacement to the __eq__ magic function"""
+        if isinstance(other, Column):
+            return (self.expr == other.expr) and (self.alias == other.alias)
+        else:
+            return False
 
     def __init__(self, **kwargs: str | Tuple[str, str] | Expression | Tuple[Expression, str]):
         """it is recommended to use the functions.col/lit/when methods to initialize Column 
@@ -285,6 +296,189 @@ class Column:
             window_spec = WindowSpec(_partition_by=None, _order_by=None, _window_frame_clause=None)
         new_expr = AnalyticFunctionExpression(self.expr, window_spec_expr=window_spec._to_expr())
         return Column(expression=new_expr, alias=None)
+    
+    # interval literals
+
+    class IntervalLiteralConstructor:
+
+        def __init__(self, duration: str | int):
+            assert isinstance(duration, str | int)
+            self.duration = duration
+
+        @property
+        def YEAR(self) -> Column:
+            return Column(expression=IntervalLiteralExpression(self.duration, datetime_part=YearDateTimePart()), alias=None)
+        
+        @property
+        def QUARTER(self) -> Column:
+            return Column(expression=IntervalLiteralExpression(self.duration, datetime_part=QuarterDateTimePart()), alias=None)
+
+        @property
+        def MONTH(self) -> Column:
+            return Column(expression=IntervalLiteralExpression(self.duration, datetime_part=MonthDateTimePart()), alias=None)
+        
+        @property
+        def WEEK(self) -> Column:
+            return Column(expression=IntervalLiteralExpression(self.duration, datetime_part=WeekDateTimePart()), alias=None)
+        
+        @property
+        def DAY(self) -> Column:
+            return Column(expression=IntervalLiteralExpression(self.duration, datetime_part=DayDateTimePart()), alias=None)
+        
+        @property
+        def HOUR(self) -> Column:
+            return Column(expression=IntervalLiteralExpression(self.duration, datetime_part=HourDateTimePart()), alias=None)
+        
+        @property
+        def MINUTE(self) -> Column:
+            return Column(expression=IntervalLiteralExpression(self.duration, datetime_part=MinuteDateTimePart()), alias=None)
+        
+        @property
+        def SECOND(self) -> Column:
+            return Column(expression=IntervalLiteralExpression(self.duration, datetime_part=SecondDateTimePart()), alias=None)
+
+    def to(self, datetime_part: str) -> Column:
+        if not isinstance(self.expr, IntervalLiteralExpression):
+            raise SyntaxError("to is a method reserved for contructing Interval Literals")
+        if self.expr.convert_to is not None:
+            raise SyntaxError("convert_to is already defined")
+        else:
+            resolved = None
+            match datetime_part.upper():
+                case "YEAR":
+                    resolved = YearDateTimePart()
+                case "QUARTER":
+                    resolved = QuarterDateTimePart()
+                case "MONTH":
+                    resolved = MonthDateTimePart()
+                case "WEEK":
+                    resolved = WeekDateTimePart()
+                case "DAY":
+                    resolved = DayDateTimePart()
+                case "HOUR":
+                    resolved = HourDateTimePart()
+                case "MINUTE":
+                    resolved = MinuteDateTimePart()
+                case "SECOND":
+                    resolved = SecondDateTimePart()
+            new_expr = self.expr.to(resolved)
+            return Column(expression=new_expr, alias=None)
+        
+    @property
+    def cast(self) -> _CastColumnConstructor:
+        return _CastColumnConstructor(self.expr)
+        
+                
+class _CastColumnConstructor():
+
+    def __init__(self, expr: Expression):
+        self.expr = expr
+    
+    @property
+    def BOOL(self) -> Column:
+        new_expr = CastExpression(self.expr, BooleanDataType())
+        return Column(expression=new_expr, alias=None)
+    
+    @property
+    def BYTES(self) -> Column:
+        new_expr = CastExpression(self.expr, BytesDataType())
+        return Column(expression=new_expr, alias=None)
+    
+    @property
+    def DATE(self) -> Column:
+        new_expr = CastExpression(self.expr, DateDataType())
+        return Column(expression=new_expr, alias=None)
+    
+    @property
+    def DATETIME(self) -> Column:
+        new_expr = CastExpression(self.expr, DateTimeDataType())
+        return Column(expression=new_expr, alias=None)
+    
+    @property
+    def GEOGRAPHY(self) -> Column:
+        new_expr = CastExpression(self.expr, GeographyDataType())
+        return Column(expression=new_expr, alias=None)
+    
+    @property
+    def INTERVAL(self) -> Column:
+        new_expr = CastExpression(self.expr, IntervalDataType())
+        return Column(expression=new_expr, alias=None)
+    
+    @property
+    def JSON(self) -> Column:
+        new_expr = CastExpression(self.expr, JSONDataType())
+        return Column(expression=new_expr, alias=None)
+    
+    @property
+    def INT64(self) -> Column:
+        new_expr = CastExpression(self.expr, INT64DataType())
+        return Column(expression=new_expr, alias=None)
+    
+    @property
+    def INT(self) -> Column:
+        """alias for int"""
+        return self.INT64
+    
+    @property
+    def SMALLINT(self) -> Column:
+        """alias for int"""
+        return self.INT64
+    
+    @property
+    def INTEGER(self) -> Column:
+        """alias for int"""
+        return self.INT64
+    
+    @property
+    def BIGINT(self) -> Column:
+        """alias for int"""
+        return self.INT64
+    
+    @property
+    def TINYINT(self) -> Column:
+        """alias for int"""
+        return self.INT64
+    
+    @property
+    def BYTEINT(self) -> Column:
+        """alias for int"""
+        return self.INT64
+    
+    @property
+    def NUMERIC(self) -> Column:
+        new_expr = CastExpression(self.expr, NUMERICDataType())
+        return Column(expression=new_expr, alias=None)
+    
+    @property
+    def DECIMAL(self) -> Column:
+        """alias for NUMERIC"""
+        return self.NUMERIC
+    
+    @property
+    def BIGNUMERIC(self) -> Column:
+        new_expr = CastExpression(self.expr, BIGNUMERICDataType())
+        return Column(expression=new_expr, alias=None)
+    
+    @property
+    def BIGDECIMAL(self) -> Column:
+        """alias for BIGNUMERIC"""
+        return self.BIGNUMERIC
+    
+    @property
+    def FLOAT64(self) -> Column:
+        new_expr = CastExpression(self.expr, FLOAT64DataType())
+        return Column(expression=new_expr, alias=None)
+    
+    @property
+    def TIME(self) -> Column:
+        new_expr = CastExpression(self.expr, TimeDataType())
+        return Column(expression=new_expr, alias=None)
+    
+    @property
+    def TIMESTAMP(self) -> Column:
+        new_expr = CastExpression(self.expr, TimestampDataType())
+        return Column(expression=new_expr, alias=None)
+
 
 
 @dataclass
