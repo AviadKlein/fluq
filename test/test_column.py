@@ -1,6 +1,8 @@
 from unittest import TestCase
 
 from sparkit.column import *
+from sparkit.expression.literals import OrderBySpecExpression
+from sparkit.expression.selectable import ColumnExpression, LiteralExpression, NegatedExpression
 from sparkit.sql import *
 
 
@@ -226,6 +228,64 @@ class TestColumn(TestCase):
                     'FROM', 'db.schema.payments', 
                     'GROUP BY', 'player', ',', 'date']
         self.assertListEqual(result, expected)
+
+    def test_interval(self):
+        t = table("db.schema.table").select(interval(3).DAY)
+        print(t.sql)
+    
+    def test_position_keyword(self):
+        self.assertEqual(PositionKeyword(3).symbol(), "PositionKeyword")
+        self.assertEqual(OFFSET(3).symbol(), "OFFSET")
+
+    def test_simple_array_indexing(self):
+        t = table("db.schema.table").select(col("some_array")[0].as_("first_value"))
+        self.assertEqual(t.sql, "SELECT some_array[ 0 ] AS first_value FROM db.schema.table")
+
+    def test_ordinal_array_indexing(self):
+        t = table("db.schema.table").select(col("some_array")[ORDINAL(3)].as_("fourth_value"))
+        self.assertEqual(t.sql, "SELECT some_array[ ORDINAL(3) ] AS fourth_value FROM db.schema.table")
+
+        t = table("db.schema.table").select(col("some_array")[SAFE_ORDINAL(3)].as_("fourth_value"))
+        self.assertEqual(t.sql, "SELECT some_array[ SAFE_ORDINAL(3) ] AS fourth_value FROM db.schema.table")
+
+    def test_offset_array_indexing(self):
+        t = table("db.schema.table").select(col("some_array")[OFFSET(3)].as_("third"))
+        self.assertEqual(t.sql, "SELECT some_array[ OFFSET(3) ] AS third FROM db.schema.table")
+
+        t = table("db.schema.table").select(col("some_array")[SAFE_OFFSET(3)].as_("third"))
+        self.assertEqual(t.sql, "SELECT some_array[ SAFE_OFFSET(3) ] AS third FROM db.schema.table")
+
+    def test_struct_indexing(self):
+        t = table("db.schema.table").select(col("some_struct")['id'].as_("id"))
+        self.assertEqual(t.sql, "SELECT some_struct.id AS id FROM db.schema.table")
+
+    def test_array_constructor(self):
+        query = table("DUAL").select(array(1,2,3,4).as_("array"))
+        self.assertEqual(query.sql, "SELECT [ 1, 2, 3, 4 ] AS array FROM DUAL")
+
+        query = table("DUAL").select(array(1).as_("array"))
+        self.assertEqual(query.sql, "SELECT [ 1 ] AS array FROM DUAL")
+
+        query = table("DUAL").select(array().as_("array"))
+        self.assertEqual(query.sql, "SELECT [ ] AS array FROM DUAL")
+
+        with self.assertRaises(SyntaxError) as cm:
+            array(1,2,3,[2,3])
+        self.assertEqual("nested arrays are not supported", str(cm.exception))
+
+        with self.assertRaises(SyntaxError) as cm:
+            array(array(1,2), array(3,4))
+        self.assertEqual("nested arrays are not supported", str(cm.exception))
+
+        with self.assertRaises(SyntaxError) as cm:
+            array(1, "1")
+        self.assertEqual("arrays must have the same type for all elements", str(cm.exception))
+
+    def test_json_constructor(self):
+        query = table("t1").select(json("""{"class" : {"students" : [{"name" : "Jane"}]}}""").as_("v"))
+        self.assertEqual(query.sql, """SELECT JSON '{"class" : {"students" : [{"name" : "Jane"}]}}' AS v FROM t1""")
+
+
 
         
         

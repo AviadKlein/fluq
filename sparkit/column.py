@@ -3,8 +3,10 @@ from __future__ import annotations
 from typing import Tuple, Any
 from sparkit.expression.base import *
 from sparkit.expression.function import *
+from sparkit.expression.literals import *
 from sparkit.expression.operator import *
 from sparkit.expression.datatype import *
+from sparkit.expression.selectable import *
 
 _function_expressions = SQLFunctionExpressions()
 
@@ -46,21 +48,6 @@ class Column:
         >>> print(mycol.alias)
         id
     """
-
-    @classmethod
-    def allowed_expressions(cls) -> Tuple[Expression]:
-        return (
-            ColumnExpression, 
-            LiteralExpression, 
-            NullExpression, 
-            CaseExpression,
-            AbstractOperationExpression, 
-            AbstractFunctionExpression, 
-            NegatedExpression,
-            AnalyticFunctionExpression,
-            AnyExpression,
-            IntervalLiteralExpression,
-            CastExpression)
     
     def _equals(self, other: Any) -> bool:
         """this is a replacement to the __eq__ magic function"""
@@ -136,12 +123,12 @@ class Column:
                 match kwargs['expression']:
                     case Expression():
                         expr = kwargs['expression']
-                        if not isinstance(expr, Column.allowed_expressions()):
-                            raise TypeError(f"supported expression types are: {Column.allowed_expressions()}, got {type(expr)}")
+                        if not isinstance(expr, SelectableExpression):
+                            raise TypeError(f"supported expression must be of type: SelectableExpression, got {type(expr)}")
                         else:
                             self.expr = kwargs['expression']
                     case _:
-                        raise TypeError(f"expression needs to be an Expression type, got {type(expr)}")
+                        raise TypeError(f"expression needs to be a SelectableExpression type, got {type(expr)}")
                 match kwargs['alias']:
                     case None:
                         pass
@@ -207,6 +194,16 @@ class Column:
     def is_not_null(self) -> Column:
         return Column(expression=IsNotNull(self.expr), alias=None)
     
+    def is_in(self, *args: str | int | float | bool | Column | ResultSet) -> Column:
+        args = list(args)
+        if isinstance(args[0], ResultSet):
+            if not len(args) == 1:
+                raise SyntaxError("can't have more than 1 Frame in an IN statement")
+            else:
+                return Column(expression=In(self.expr, args[0]._query_expr), alias=None)
+        args = [self._resolve_type(arg).expr for arg in args]
+        return Column(expression=In(self.expr, *args), alias=None)
+    
     def between(self, 
                 from_: str | int | float | bool | Column, 
                 to: str | int | float | bool | Column) -> Column:
@@ -257,6 +254,12 @@ class Column:
         div_expr = Divide(self.expr, other.expr)
         floor_expr = _function_expressions.FunctionExpressionFLOOR(X=div_expr)
         return Column(expression=floor_expr, alias=None)
+    
+    def __getitem__(self, index: int | str | PositionKeyword) -> Column:
+        if not isinstance(index, int | str | PositionKeyword):
+            raise TypeError("")
+        new_expr = IndexOperatorExpression(self.expr, index=index)
+        return Column(expression=new_expr, alias=None)
     
     def when(self, condition: Column, value: str | int | float | bool | Column) -> Column:
         """only works when the expr is a CaseExpression"""
@@ -367,8 +370,26 @@ class Column:
     @property
     def cast(self) -> _CastColumnConstructor:
         return _CastColumnConstructor(self.expr)
-        
-                
+
+
+@dataclass
+class OFFSET(PositionKeyword):
+    pass
+
+@dataclass
+class SAFE_OFFSET(PositionKeyword):
+    pass
+
+@dataclass
+class ORDINAL(PositionKeyword):
+    pass
+
+@dataclass
+class SAFE_ORDINAL(PositionKeyword):
+    pass
+
+
+
 class _CastColumnConstructor():
 
     def __init__(self, expr: Expression):

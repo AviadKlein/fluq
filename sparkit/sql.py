@@ -1,10 +1,12 @@
 from typing import Any, List
 
+from sparkit._util import is_valid_json
 from sparkit.expression.base import *
 from sparkit.expression.function import *
 from sparkit.expression.clause import *
 from sparkit.expression.query import *
 from sparkit.column import Column
+from sparkit.expression.selectable import AnyExpression, ArrayExpression, ColumnExpression, JSONExpression, LiteralExpression, TupleExpression
 from sparkit.frame import Frame
 
 
@@ -21,6 +23,73 @@ def lit(value: int | float | str | bool) -> Column:
 
 def interval(duration: str | int) -> Column.IntervalLiteralConstructor:
     return Column.IntervalLiteralConstructor(duration=duration)
+
+def array(*args) -> Column:
+    """construct an array of type T
+    Nested arrays are not supported, since type checking is complex, one can use Column objects too, 
+    but these will be only checked once passed to the SQL engine
+    Primitives will be wrapped with a LiteralExpression
+
+    Raises:
+        SyntaxError - Arrays of Arrays are not supported, mix of types is not supported
+    
+    Sournce https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#array_type
+    """
+    args = list(args)
+    # check if nested
+    for arg in args:
+        if isinstance(arg, list | tuple):
+            raise SyntaxError("nested arrays are not supported")
+    # check all types are the same
+    if len(args) == 0:
+        return Column(expression=ArrayExpression(), alias=None)    
+    else:
+        head, *tail = args
+        for arg in tail:
+            if not isinstance(arg, type(head)):
+                raise SyntaxError("arrays must have the same type for all elements")
+        if isinstance(head, Column):
+            if any([isinstance(_.expr, ArrayExpression) for _ in args]):
+                raise SyntaxError("nested arrays are not supported")
+            elements = [_.expr for _ in args]
+        else:
+            elements = [LiteralExpression(_) for _ in args]
+        expr = ArrayExpression(*elements)
+        return Column(expression=expr, alias=None)
+    
+def json(json_str: str) -> Column:
+    if not isinstance(json_str, str):
+        raise TypeError("")
+    else:
+        if is_valid_json(json_str):
+            expr = JSONExpression(json_str)
+            return Column(expression=expr, alias=None)
+        else:
+            raise SyntaxError(f"not a valid JSON: '{json_str}'")
+    
+def tup(*args: int | float | str | bool | Column) -> Column:
+    """create tuples of columns literal
+    
+    Usage:
+        >>> ids = table("ids").select(col("id"), col("parent_id"))
+        >>> table("t").where(tup(col("id"), col("parent_id")).is_in(ids))
+    
+    """
+    exprs = []
+    for arg in args:
+        if isinstance(arg, int | float | str | bool):
+            exprs.append(LiteralExpression(arg))
+        elif isinstance(arg, Column):
+            exprs.append(arg.expr)
+        else:
+            raise TypeError(f"arg must be int | float | str | bool | Column, got {type(arg)}")
+        
+    new_expr = TupleExpression(*exprs)
+    return Column(expression=new_expr, alias=None)
+    
+        
+
+
 
 def expr(expression: str) -> Column:
     """in case sparkit does not support a specific function or a handler

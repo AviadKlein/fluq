@@ -6,6 +6,7 @@ from sparkit.expression.operator import *
 from sparkit.expression.clause import *
 from sparkit.expression.function import *
 from sparkit.expression.query import *
+from sparkit.expression.selectable import ColumnExpression
 
 
 class TestQuery(TestCase):

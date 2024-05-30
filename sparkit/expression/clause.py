@@ -4,8 +4,9 @@ from typing import List, Optional, Tuple
 
 from sparkit.expression.base import *
 from sparkit.expression.join import *
-from sparkit.expression.operator import LogicalOperationExpression, MathOperationExpression, And, Or
-from sparkit.expression.function import AnalyticFunctionExpression, AbstractFunctionExpression, CaseExpression, SelectableExpressionType
+from sparkit.expression.literals import OrderBySpecExpression
+from sparkit.expression.operator import LogicalOperationExpression, And, Or
+from sparkit.expression.selectable import ColumnExpression
 
 
 
@@ -15,7 +16,7 @@ class ClauseExpression(Expression):
 
 class SelectClauseExpression(ClauseExpression):
 
-    def __init__(self, expressions: List[SelectableExpressionType], aliases: List[Optional[ValidName]]):
+    def __init__(self, expressions: List[SelectableExpression], aliases: List[Optional[ValidName]]):
         if len(expressions) != len(aliases):
             raise TypeError(f"got differing length of expressions: {len(expressions)} and aliases: {len(aliases)}, inputs were: {expressions=} and {aliases=}")
         self.expressions = []
@@ -34,18 +35,18 @@ class SelectClauseExpression(ClauseExpression):
         cond &= self._has_wilcard
         return cond
 
-    def _resolve_arg(self, arg: SelectableExpressionType | Tuple[SelectableExpressionType, Optional[ValidName | str]]) -> Tuple[SelectableExpressionType, Optional[ValidName | str]]:
+    def _resolve_arg(self, arg: SelectableExpression | Tuple[SelectableExpression, Optional[ValidName | str]]) -> Tuple[SelectableExpression, Optional[ValidName | str]]:
         if not isinstance(arg, tuple):
-            if not isinstance(arg, self.allowed_expression_types()):
-                raise TypeError(f"expr type is not supported, got: {type(arg)}, expected: [{self.allowed_expression_types()}]")
+            if not isinstance(arg, SelectableExpression):
+                raise TypeError(f"expr type is not supported, got: {type(arg)}, expected: SelectableExpression")
             if arg == ColumnExpression("*"):
                 assert not self._has_wilcard, """can only have 1 ColumnExpression("*")"""
             return arg, None
         elif isinstance(arg, tuple):
             assert len(arg) == 2
             expr, optional_alias = arg
-            if not isinstance(expr, self.allowed_expression_types()):
-                raise TypeError(f"expr type is not supported, got: {type(expr)}, expected: [{self.allowed_expression_types()}]")
+            if not isinstance(expr, SelectableExpression):
+                raise TypeError(f"expr type is not supported, got: {type(expr)}, expected: SelectableExpression")
             assert (optional_alias is None) or isinstance(optional_alias, (ValidName | str))
             if optional_alias is None:
                 return self._resolve_arg(expr)
@@ -61,7 +62,7 @@ class SelectClauseExpression(ClauseExpression):
             return expr, optional_alias
 
 
-    def add(self, expression: SelectableExpressionType, alias: Optional[ValidName | str]=None) -> SelectClauseExpression:
+    def add(self, expression: SelectableExpression, alias: Optional[ValidName | str]=None) -> SelectClauseExpression:
         expr, optional_alias = self._resolve_arg((expression, alias))
 
         return SelectClauseExpression(
@@ -69,21 +70,8 @@ class SelectClauseExpression(ClauseExpression):
             aliases=[*self.aliases, optional_alias]
         )
     
-    @staticmethod
-    def allowed_expression_types():
-        return tuple([
-            LiteralExpression,
-            ColumnExpression, 
-            NullExpression, 
-            LogicalOperationExpression, 
-            MathOperationExpression, 
-            CaseExpression,
-            AbstractFunctionExpression,
-            AnalyticFunctionExpression,
-            AnyExpression])
-
     @classmethod
-    def from_args(cls, *args: Tuple[SelectableExpressionType, Optional[ValidName]]) -> SelectClauseExpression:
+    def from_args(cls, *args: Tuple[SelectableExpression, Optional[ValidName]]) -> SelectClauseExpression:
         result = SelectClauseExpression([],[])
         for arg in args:
             if not isinstance(arg, tuple):
@@ -318,27 +306,17 @@ class QualifyClauseExpression(PredicateClauseExpression):
 
 class GroupByClauseExpression(ClauseExpression):
 
-    def __init__(self, *groupable_items: SelectableExpressionType):
+    def __init__(self, *groupable_items: SelectableExpression):
         groupable_items = list(groupable_items)
         if len(groupable_items) != len(set(groupable_items)):
             raise TypeError("got duplicates in grouping items")
         # check types
-        all_are_expressions = all([isinstance(_, self.allowed_expression_types()) for _ in groupable_items])
+        all_are_expressions = all([isinstance(_, SelectableExpression) for _ in groupable_items])
         if not all_are_expressions:
             raise TypeError("expressions can only be list[int] or list[SelectableExpressionType]")
         
         self._expressions = groupable_items
 
-    @staticmethod
-    def allowed_expression_types():
-        return tuple([
-            LiteralExpression,
-            ColumnExpression, 
-            NullExpression, 
-            LogicalOperationExpression, 
-            MathOperationExpression, 
-            CaseExpression,
-            AbstractFunctionExpression])
     
     def tokens(self) -> List[str]:
         if len(self._expressions) == 1:
@@ -351,20 +329,20 @@ class GroupByClauseExpression(ClauseExpression):
 
 class OrderByClauseExpression(ClauseExpression):
 
-    def __init__(self, *ordering_items: SelectableExpressionType | Tuple[SelectableExpressionType, OrderBySpecExpression]):
+    def __init__(self, *ordering_items: SelectableExpression | Tuple[SelectableExpression, OrderBySpecExpression]):
         ordering_items = list(ordering_items)
-        all_expressions_or_tuples = all([isinstance(_, (tuple, *self.allowed_expression_types())) for _ in ordering_items])
+        all_expressions_or_tuples = all([isinstance(_, (tuple, SelectableExpression)) for _ in ordering_items])
         if not all_expressions_or_tuples:
             raise TypeError("input must be a list with arguments that are either SelectableExpressionType or Tuple[SelectableExpressionType, OrderBySpecExpression]")
         
         self._expressions = []
         for arg in ordering_items:
-            if isinstance(arg, self.allowed_expression_types()):
+            if isinstance(arg, SelectableExpression):
                 self._expressions.append((arg, OrderBySpecExpression()))
             elif isinstance(arg, tuple):
                 assert len(arg) == 2
                 expr, orderbyspec = arg
-                assert isinstance(expr, self.allowed_expression_types())
+                assert isinstance(expr, SelectableExpression)
                 assert isinstance(orderbyspec, OrderBySpecExpression)
                 self._expressions.append((expr, orderbyspec))
             else:
@@ -373,17 +351,6 @@ class OrderByClauseExpression(ClauseExpression):
         if len(_keys) != len(set(_keys)):
             raise TypeError("duplicate ordering items")
 
-
-    @staticmethod
-    def allowed_expression_types():
-        return tuple([
-            LiteralExpression,
-            ColumnExpression, 
-            NullExpression, 
-            LogicalOperationExpression, 
-            MathOperationExpression, 
-            CaseExpression, 
-            AnalyticFunctionExpression])
     
     def resolve_expression_sql(self) -> str:
         result = []

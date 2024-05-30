@@ -5,6 +5,7 @@ from sparkit.expression.base import *
 from sparkit.expression.query import Queryable, QueryExpression
 from sparkit.expression.clause import *
 from sparkit.expression.join import *
+from sparkit.expression.selectable import ColumnExpression
 from sparkit.expression.set_operation import *
 from sparkit.column import Column
 from sparkit.render import Renderable
@@ -19,7 +20,7 @@ def copy_doc(source, preamble: Optional[str]=None):
         return target
     return decorator
 
-class Frame:
+class Frame(ResultSet):
     """The Frame API to writing SQL in a functional manner
     It is advised not to try and initialize a Frame directly, rather, one should use an exisiting frame
     or start from the 'table' method that points to a table and returns a default 'SELECT * FROM...' Frame object

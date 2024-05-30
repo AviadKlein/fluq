@@ -2,6 +2,7 @@ from unittest import TestCase
 
 from sparkit.expression.base import *
 from sparkit.expression.function import *
+from sparkit.expression.selectable import ColumnExpression, LiteralExpression
 
 class TestFunction(TestCase):
 

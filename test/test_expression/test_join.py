@@ -5,6 +5,7 @@ from sparkit.expression.operator import *
 from sparkit.expression.join import *
 from sparkit.expression.clause import FromClauseExpression, SelectClauseExpression
 from sparkit.expression.query import QueryExpression
+from sparkit.expression.selectable import ColumnExpression
 
 class TestJoin(TestCase):
 

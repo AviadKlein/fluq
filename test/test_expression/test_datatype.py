@@ -1,7 +1,7 @@
 from unittest import TestCase
 
 from sparkit.expression.datatype import *
-from sparkit.expression.base import ColumnExpression
+from sparkit.expression.selectable import ColumnExpression
 
 class TestDataType(TestCase):
 

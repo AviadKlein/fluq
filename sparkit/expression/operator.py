@@ -2,10 +2,11 @@ from dataclasses import dataclass
 from abc import abstractmethod
 from typing import List
 
-from sparkit.expression.base import Expression, LiteralTypes, LiteralExpression, NullExpression, Queryable
+from sparkit.expression.base import Expression, Queryable, SelectableExpression
+from sparkit.expression.selectable import LiteralExpression, LiteralTypes, NullExpression
 
 @dataclass
-class AbstractOperationExpression(Expression):
+class AbstractOperationExpression(SelectableExpression):
     """an expression to denote an operation between 2 expressions
     this is supposed to serve:
     a + 2
@@ -250,3 +251,49 @@ class Divide(MathOperationExpression):
     @property
     def op_str(self) -> str:
         return "/"
+
+@dataclass
+class PositionKeyword:
+    """
+    Source: https://cloud.google.com/bigquery/docs/reference/standard-sql/functions-and-operators#array_subscript_operator
+    """
+    value: int
+
+    @abstractmethod
+    def symbol(self) -> str:
+        return self.__class__.__name__
+
+
+class IndexOperatorExpression(SelectableExpression):
+    """usd to denote access to columns, structs"""
+
+    def __init__(self, expr: Expression, index: int | str | PositionKeyword):
+        self.expr = expr
+        if isinstance(index, int):
+            if index < 0:
+                raise SyntaxError(f"can't index with negative numbers, got {index}")
+            self._type = 'array_index'
+            self._value = index
+        elif isinstance(index, str):
+            self._type = 'struct_name'
+            self._value = index
+        elif isinstance(index, PositionKeyword):
+            self._type = 'position_keyword'
+            self._value = index
+
+    def resolve_index_token(self) -> str:
+        match self._type:
+            case 'array_index':
+                return str(self._value)
+            case 'struct_name':
+                return self._value
+            case 'position_keyword':
+                return f"{self._value.symbol()}({self._value.value})"
+
+    def tokens(self) -> List[str]:
+        *init, last = self.expr.tokens()
+        if self._type == 'struct_name':
+            return [*init, f"{last}.{self.resolve_index_token()}"]
+        else:
+            return [*init, f"{last}[", self.resolve_index_token(), ']']
+        

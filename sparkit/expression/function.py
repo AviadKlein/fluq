@@ -5,12 +5,9 @@ from typing import List, Optional, Tuple, Dict
 from abc import abstractmethod
 
 from sparkit.expression.base import *
+from sparkit.expression.literals import OrderBySpecExpression
 from sparkit.expression.operator import *
 
-
-# Selectable types
-SelectableExpressionType = LiteralExpression | ColumnExpression | \
-    LogicalOperationExpression | MathOperationExpression | NullExpression | AnyExpression
 
 @dataclass
 class WindowFrameExpression(Expression):
@@ -87,15 +84,15 @@ class WindowFrameExpression(Expression):
 
 @dataclass
 class WindowSpecExpression(Expression):
-    partition_by: Optional[List[SelectableExpressionType]]=None
-    order_by: Optional[List[Tuple[SelectableExpressionType, Optional[OrderBySpecExpression]]]]=None
+    partition_by: Optional[List[SelectableExpression]]=None
+    order_by: Optional[List[Tuple[SelectableExpression, Optional[OrderBySpecExpression]]]]=None
     window_frame_clause: Optional[WindowFrameExpression]=None
 
     def __post_init__(self):
         if self.partition_by is not None:
-            assert all([isinstance(_, SelectableExpressionType) for _ in self.partition_by])
+            assert all([isinstance(_, SelectableExpression) for _ in self.partition_by])
         if self.order_by is not None:
-            assert all([isinstance(_[0], SelectableExpressionType) for _ in self.order_by])
+            assert all([isinstance(_[0], SelectableExpression) for _ in self.order_by])
             assert all([isinstance(_[1], OrderBySpecExpression) for _ in self.order_by if _[1] is not None])
         if self.window_frame_clause is not None:
             assert isinstance(self.window_frame_clause, WindowFrameExpression)
@@ -139,8 +136,8 @@ class WindowSpecExpression(Expression):
 
 
 @dataclass
-class AnalyticFunctionExpression(Expression):
-    expr: SelectableExpressionType
+class AnalyticFunctionExpression(SelectableExpression):
+    expr: SelectableExpression
     window_spec_expr: WindowSpecExpression
     
     def tokens(self) -> List[str]:
@@ -155,7 +152,7 @@ class AnalyticFunctionExpression(Expression):
         return hash(_str)
     
     # Functions
-class AbstractFunctionExpression(Expression):
+class AbstractFunctionExpression(SelectableExpression):
     """abstract method to hold all function expressions
 
     functions, as expressions, are just a symbol and a list of named arguments
@@ -252,7 +249,7 @@ class SQLFunctionExpressions:
             setattr(self, f"FunctionExpression{symbol}", self.create_concrete_expression_class(symbol, arguments, is_aggregate))
     
 
-class CaseExpression(Expression):
+class CaseExpression(SelectableExpression):
 
     @classmethod
     def _resolve_condition(cls, condition: Expression) -> LogicalOperationExpression:

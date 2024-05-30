@@ -4,6 +4,7 @@ from sparkit.expression.base import *
 from sparkit.expression.operator import *
 from sparkit.expression.query import QueryExpression
 from sparkit.expression.clause import FromClauseExpression, SelectClauseExpression
+from sparkit.expression.selectable import ColumnExpression, LiteralExpression
 
 class TestOperator(TestCase):
 

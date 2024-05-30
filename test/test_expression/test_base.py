@@ -1,6 +1,7 @@
 from unittest import TestCase
 
 from sparkit.expression.base import *
+from sparkit.expression.selectable import AnyExpression, ColumnExpression, LiteralExpression, NullExpression, TupleExpression
 
 class TestValidName(TestCase):
 
@@ -91,4 +92,14 @@ class TestExpression(TestCase):
         AnyExpression("c")
         AnyExpression("func(3,3)")
         AnyExpression("func(3, 3)")
+
+    def test_tuple_expression(self):
+        logic = TupleExpression(1,2,3,4)
+        self.assertEqual(logic.tokens(), ['(', '1', ',', '2', ',', '3', ',', '4', ')'])
+
+        logic = TupleExpression(LiteralExpression("a"), LiteralExpression("b"))
+        self.assertEqual(logic.tokens(), ['(', "'a'", ',', "'b'", ')'])
+
+        logic = TupleExpression(1, LiteralExpression("b"))
+        self.assertEqual(logic.tokens(), ['(', "1", ',', "'b'", ')'])
         

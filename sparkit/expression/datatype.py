@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from abc import abstractclassmethod
-from typing import Any, List, Optional, Dict, Tuple
-from sparkit.expression.base import Expression
+from typing import Any, List, Dict, Tuple
+from sparkit.expression.base import Expression, SelectableExpression
 
 class DataTypeExpression(Expression):
     """
@@ -179,7 +179,7 @@ class TimestampDataType(DataTypeExpression):
     def symbol(cls) -> str:
         return "TIMESTAMP"
     
-class CastExpression(Expression):
+class CastExpression(SelectableExpression):
 
     def __init__(self, base: Expression, to: DataTypeExpression) -> None:
         assert isinstance(base, Expression)
