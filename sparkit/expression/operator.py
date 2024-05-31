@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from abc import abstractmethod
 from typing import List
 
-from sparkit.expression.base import Expression, Queryable, SelectableExpression
+from sparkit.expression.base import Expression, QueryableExpression, SelectableExpression, JoinableExpression
 from sparkit.expression.selectable import LiteralExpression, LiteralTypes, NullExpression
 
 @dataclass
@@ -107,13 +107,13 @@ class LessOrEqual(LogicalOperationExpression):
 class In(LogicalOperationExpression):
 
     def __init__(self, left: Expression, 
-                 *args: Expression | LiteralTypes | Queryable):
+                 *args: Expression | LiteralTypes | QueryableExpression):
         assert isinstance(left, Expression)
         self.left = left
         self.is_query = False
 
         # assert only 1 QueryExpression
-        _num_queries = sum([1 for _ in args if isinstance(_, Queryable)])
+        _num_queries = sum([1 for _ in args if isinstance(_, QueryableExpression)])
         assert _num_queries <= 1
 
         if _num_queries == 1:
@@ -146,30 +146,34 @@ class In(LogicalOperationExpression):
             zipped = zip(resolved_tokens[:-1], [',']*(len(resolved_tokens)-1))
             resolved_tokens = [elem for pair in zipped for elem in pair] + [last_token]
             return [*self.left.tokens(), self.op_str, '(', *resolved_tokens, ')']
-    
-class Not(NotEqual):
 
-    def __init__(self, expr: Expression):
-        super().__init__(left=expr, right=LiteralExpression(True))
-
-class IsNull(Equal):
-
-    def __init__(self, expr: Expression):
-        super().__init__(left=expr, right=NullExpression())
+@dataclass
+class Is(LogicalOperationExpression):
 
     @property
     def op_str(self) -> str:
         return "IS"
     
+class Not(SelectableExpression):
 
-class IsNotNull(NotEqual):
+    def __init__(self, expr: Expression):
+        self.expr = expr
+
+    def tokens(self) -> List[str]:
+        return ['NOT', *self.expr.tokens()]
+
+
+class IsNull(Is):
 
     def __init__(self, expr: Expression):
         super().__init__(left=expr, right=NullExpression())
+    
 
-    @property
-    def op_str(self) -> str:
-        return "IS NOT"
+class IsNotNull(Is):
+
+    def __init__(self, expr: Expression):
+        super().__init__(left=expr, right=Not(NullExpression()))
+    
 
 class Between(LogicalOperationExpression):
 
@@ -223,6 +227,26 @@ class Like(LogicalOperationExpression):
     @property
     def op_str(self) -> str:
         return "LIKE"
+    
+class LikeAll(Like):
+
+    @property
+    def op_str(self) -> str:
+        return f"{super().op_str} ALL"
+    
+class LikeAny(Like):
+
+    @property
+    def op_str(self) -> str:
+        return f"{super().op_str} ANY"
+    
+class LikeSome(Like):
+
+    @property
+    def op_str(self) -> str:
+        return f"{super().op_str} SOME"
+    
+
     
 
 class Plus(MathOperationExpression):
@@ -296,4 +320,18 @@ class IndexOperatorExpression(SelectableExpression):
             return [*init, f"{last}.{self.resolve_index_token()}"]
         else:
             return [*init, f"{last}[", self.resolve_index_token(), ']']
+
+@dataclass        
+class UnNestOperatorExpression(SelectableExpression, JoinableExpression):
+    expr: Expression
+
+    def __post_init__(self):
+        if not isinstance(self.expr, Expression):
+            raise TypeError()
+        
+    def tokens(self) -> List[str]:
+        return ['UNNEST(', *self.expr.tokens() ,')']
+    
+    def __hash__(self):
+        return hash(''.join(self.tokens()))
         

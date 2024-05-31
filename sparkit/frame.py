@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 from sparkit.expression.base import *
-from sparkit.expression.query import Queryable, QueryExpression
+from sparkit.expression.query import QueryableExpression, QueryExpression
 from sparkit.expression.clause import *
 from sparkit.expression.join import *
 from sparkit.expression.selectable import ColumnExpression
@@ -29,8 +29,8 @@ class Frame(ResultSet):
         >>> frame: Frame = table("db.schema.t1").select("id", "name", "age")
     """
 
-    def __init__(self, queryable_expression: Queryable, alias: Optional[str]=None):
-        assert isinstance(queryable_expression, Queryable)
+    def __init__(self, queryable_expression: QueryableExpression, alias: Optional[str]=None):
+        assert isinstance(queryable_expression, QueryableExpression)
         self._query_expr = queryable_expression
         self._alias = None
         if alias is not None:
@@ -39,6 +39,9 @@ class Frame(ResultSet):
     def as_(self, alias: str) -> Frame:
         assert isinstance(alias, str)
         return Frame(self._query_expr, alias)
+    
+    def _get_expr(self) -> Expression:
+        return self._query_expr
     
     @property
     def alias(self) -> Optional[str]:
@@ -219,13 +222,15 @@ class Frame(ResultSet):
         query = QueryExpression(from_clause=from_clause, select_clause=select_clause)
         return Frame(queryable_expression=query)
         
-    def cartesian(self, other: Frame) -> Frame:
+    def cartesian(self, other: Frame | Column) -> Frame:
         """
-        performs a cartesian (cross join) with another frame
+        performs a cartesian (cross join) with another frame or "special" columns (see below)
         both frames will be wrapped in a subquery and will require an alias, the select will be simple
 
         Args:
-            other: Frame - the object to join
+            other: Frame | Column - the object to join
+                no restrictions for any kind of Frame
+                Column, however, needs to be an UNNESTed column, see examples
             join_type: str - 'inner' (default), 'left', 'right' or 'full other'
 
         Raises:
@@ -236,32 +241,59 @@ class Frame(ResultSet):
             >>> t2 = table("db.schema.t2").as_("t2")
             >>> t3 = t1.cartesian(t2).select("t1.id", "t2.name")
             >>> print(t3.sql)
+
+            Using UNNEST:
+            >>> table("db.schema.t1").as_("t1").cartesian(unnest(array(1,2,3)).as_("arr"))
         """
-        assert isinstance(other, Frame)
+        assert isinstance(other, Frame | Column)
+            
 
         if self.alias is None:
             raise TypeError("alias needs to be defined before cartesian join")
         if other.alias is None:
             raise TypeError("other's alias needs to be defined before cartesian join")
         
-        match (self._is_simple(), other._is_simple()):
-            case (True, True):
-                this: QueryExpression = self._query_expr # only QueryExpression can be simple
-                that: QueryExpression = other._query_expr
-                this_table: TableNameExpression = this.from_clause.from_item
-                that_table: TableNameExpression = that.from_clause.from_item
-                assert (self.alias is not None) and (other.alias is not None), \
-                    f"both aliases need to be defined"
-                kwargs = {
-                    'left': this_table, 'right': that_table,
-                    'left_alias': self.alias, 'right_alias': other.alias,
-                }
-                join_expression = JoinOperationExpression.from_kwargs(join_type='cross', **kwargs)
-            case _:
-                join_expression = JoinOperationExpression.from_kwargs(
-                    join_type='cross', left=self._query_expr, right=other._query_expr,
-                    left_alias=self.alias, right_alias=other.alias
-                )
+        if isinstance(other, Column):
+            if not isinstance(other.expr, UnNestOperatorExpression):
+                raise SyntaxError("can't join on a column that is not an UNNEST operator")
+            match self._is_simple():
+                case False:
+                    join_expression = JoinOperationExpression.from_kwargs(
+                        join_type='cross',
+                        left=self._query_expr, 
+                        left_alias=self.alias, 
+                        right=other.expr, 
+                        right_alias=other.alias
+                    )
+                case True:
+                    this: QueryExpression = self._query_expr
+                    join_expression = JoinOperationExpression.from_kwargs(
+                        join_type='cross',
+                        left=this.from_clause.from_item, 
+                        left_alias=self.alias, 
+                        right=other.expr, 
+                        right_alias=other.alias
+                    )
+
+        else:
+            match (self._is_simple(), other._is_simple()):
+                case (True, True):
+                    this: QueryExpression = self._query_expr # only QueryExpression can be simple
+                    that: QueryExpression = other._query_expr
+                    this_table: TableNameExpression = this.from_clause.from_item
+                    that_table: TableNameExpression = that.from_clause.from_item
+                    assert (self.alias is not None) and (other.alias is not None), \
+                        f"both aliases need to be defined"
+                    kwargs = {
+                        'left': this_table, 'right': that_table,
+                        'left_alias': self.alias, 'right_alias': other.alias,
+                    }
+                    join_expression = JoinOperationExpression.from_kwargs(join_type='cross', **kwargs)
+                case _:
+                    join_expression = JoinOperationExpression.from_kwargs(
+                        join_type='cross', left=self._query_expr, right=other._query_expr,
+                        left_alias=self.alias, right_alias=other.alias
+                    )
         select_clause = SelectClauseExpression.wildcard()
         from_clause = FromClauseExpression(join_expression=join_expression)
         query = QueryExpression(from_clause=from_clause, select_clause=select_clause)
@@ -315,7 +347,7 @@ class Frame(ResultSet):
             case QueryExpression():
                 new_query = self._query_expr.copy(limit_clause=limit_clause)
                 return Frame(new_query)
-            case Queryable():
+            case QueryableExpression():
                 raise NotImplementedError()
 
     def order_by(self, *cols: str | Column) -> Frame:
@@ -336,7 +368,7 @@ class Frame(ResultSet):
             case QueryExpression():
                 new_query = self._query_expr.copy(order_by_clause=order_by_clause)
                 return Frame(new_query, alias=self.alias)
-            case Queryable():
+            case QueryableExpression():
                 raise NotImplementedError()
 
     def _set_operation(self, other: Frame, operation: SetOperation):
@@ -356,6 +388,29 @@ class Frame(ResultSet):
     
     def except_distinct(self, other: Frame) -> Frame:
         return self._set_operation(other=other, operation=ExceptSetOperation)
+    
+    def distinct(self) -> Frame:
+        """return a DISTINCT sql query
+        
+        Behavior:
+         if the internal query is a simple one, will just append the DISTINCT keyword to the select clause
+         if the internal query is a set operation, will wrap the entire query as a sub-query and will SELECT DISTINCT * from it"""
+        match self._query_expr:
+            case QueryExpression(_):
+                new_select_clause = self._query_expr.select_clause.distinct()
+                new_expr = self._query_expr.copy(select_clause=new_select_clause)
+                return Frame(queryable_expression=new_expr, alias=self.alias)
+            case SetOperation(_):
+                "wrap as a subselect"
+                if self.alias is None:
+                    raise SyntaxError("querying over set operations requires an alias")
+                new_select_clause = SelectClauseExpression.wildcard().distinct()
+                new_from_clause = FromClauseExpression(query=self._query_expr, alias=self.alias)
+                new_query_expr = QueryExpression(from_clause=new_from_clause, select_clause=new_select_clause)
+                return Frame(queryable_expression=new_query_expr, alias=None)
+            case _:
+                raise TypeError(f"unsupported Querayble, got {type(self._query_expr)}")
+        
 
     @property
     def sql(self) -> Renderable:

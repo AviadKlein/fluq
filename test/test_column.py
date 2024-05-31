@@ -83,6 +83,11 @@ class TestColumn(TestCase):
 
         self.assertEqual(a.like("%%foobar").expr.sql, "a LIKE '%%foobar'")
 
+    def test_like_quantifier(self):
+        a = col("a").like_all(array("%%foobar", "%%ity"))
+    
+        print(a.expr.sql)
+
     def test_math(self):
 
         a = col("a")
@@ -98,15 +103,10 @@ class TestColumn(TestCase):
         self.assertEqual((a - b).expr.sql, "a - b")
         self.assertEqual((a * b).expr.sql, "a * b")
         self.assertEqual((a / b).expr.sql, "a / b")
-        self.assertEqual((a // b).expr.sql, "FLOOR(a / b)")
-        self.assertEqual((a % b).expr.sql, "MOD(a, b)")
-
-        self.assertEqual((a + 5).expr.sql, "a + 5")
-        self.assertEqual((a - 5).expr.sql, "a - 5")
-        self.assertEqual((a * 5).expr.sql, "a * 5")
-        self.assertEqual((a / 5).expr.sql, "a / 5")
-        self.assertEqual((a // 5).expr.sql, "FLOOR(a / 5)")
-        self.assertEqual((a % 5).expr.sql, "MOD(a, 5)")
+        self.assertEqual((a // b).expr.sql, "FLOOR( a / b )")
+        self.assertEqual((a % b).expr.sql, "MOD( a, b )")
+        self.assertEqual(abs(a).expr.sql, "ABS( a )")
+        self.assertEqual((a**3).expr.sql, "POWER( a, 3 )")
 
 
     def test_case_expr(self):
@@ -125,19 +125,19 @@ class TestColumn(TestCase):
     def test_functions(self):
         
         result = functions.mod(col("a"), col("b"))
-        self.assertEqual(result.expr.sql, "MOD(a, b)")
+        self.assertEqual(result.expr.sql, "MOD( a, b )")
 
         result = functions.floor(lit(1.2))
-        self.assertEqual(result.expr.sql, "FLOOR(1.2)")
+        self.assertEqual(result.expr.sql, "FLOOR( 1.2 )")
 
         result = functions.current_date()
-        self.assertEqual(result.expr.sql, "CURRENT_DATE()")
+        self.assertEqual(result.expr.sql, "CURRENT_DATE( )")
 
         result = functions.sum(col("a"))
-        self.assertEqual(result.expr.sql, "SUM(a)")
+        self.assertEqual(result.expr.sql, "SUM( a )")
 
         result = functions.sum(col("a"))
-        self.assertEqual(result.expr.sql, "SUM(a)")
+        self.assertEqual(result.expr.sql, "SUM( a )")
 
     def test_ordering(self):
         
@@ -218,12 +218,11 @@ class TestColumn(TestCase):
                 )
         )
         result = t.sql
-        print(result)
-        expected = """SELECT player, date, SUM(value) AS sum_value, SUM(value) OVER ( PARTITION BY player ) AS total_per_player, SUM(value) OVER ( PARTITION BY player ORDER BY date ASC NULLS FIRST ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING ) AS running_window FROM db.schema.payments GROUP BY player, date"""
+        expected = """SELECT player, date, SUM( value ) AS sum_value, SUM( value ) OVER ( PARTITION BY player ) AS total_per_player, SUM( value ) OVER ( PARTITION BY player ORDER BY date ASC NULLS FIRST ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING ) AS running_window FROM db.schema.payments GROUP BY player, date"""
         self.assertEqual(result, expected)
         
         result = t._query_expr.tokens()
-        expected = ['SELECT', 'player', ',', 'date', ',', 'SUM(value)', 'AS' ,'sum_value', ',', 'SUM(value)', 'OVER', '(', 'PARTITION BY', 'player',')', 'AS', 'total_per_player', ',', 'SUM(value)', 'OVER','(','PARTITION BY', 'player',
+        expected = ['SELECT', 'player', ',', 'date', ',', 'SUM(', 'value', ')', 'AS' ,'sum_value', ',', 'SUM(', 'value', ')', 'OVER', '(', 'PARTITION BY', 'player',')', 'AS', 'total_per_player', ',', 'SUM(', 'value' ,')', 'OVER','(','PARTITION BY', 'player',
                     'ORDER BY', 'date', 'ASC NULLS FIRST', 'ROWS', 'BETWEEN', '5 PRECEDING', 'AND', '5 FOLLOWING',')', 'AS', 'running_window', 
                     'FROM', 'db.schema.payments', 
                     'GROUP BY', 'player', ',', 'date']

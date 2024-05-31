@@ -8,8 +8,6 @@ from sparkit.expression.operator import *
 from sparkit.expression.datatype import *
 from sparkit.expression.selectable import *
 
-_function_expressions = SQLFunctionExpressions()
-
 class Column:
     """A container for SQL expressions in Frames
     
@@ -218,42 +216,69 @@ class Column:
     def __or__(self, other: str | int | float | bool | Column) -> Column:
         other = self._resolve_type(other)
         return Column(expression=Or(self.expr, other.expr), alias=None)
-    
+
     def like(self, other: str | Column) -> Column:
         if not isinstance(other, str | Column):
             raise TypeError(f"like only supports str | Column, got {type(other)}")
         other = self._resolve_type(other)
         return Column(expression=Like(self.expr, other.expr), alias=None)
     
+    def like_all(self, other: str | Column) -> Column:
+        if not isinstance(other, str | Column):
+            raise TypeError(f"like only supports str | Column, got {type(other)}")
+        other = self._resolve_type(other)
+        return Column(expression=LikeAll(self.expr, other.expr), alias=None)
+    
+    def like_any(self, other: str | Column) -> Column:
+        if not isinstance(other, str | Column):
+            raise TypeError(f"like only supports str | Column, got {type(other)}")
+        other = self._resolve_type(other)
+        return Column(expression=LikeAny(self.expr, other.expr), alias=None)
+    
+    def like_some(self, other: str | Column) -> Column:
+        if not isinstance(other, str | Column):
+            raise TypeError(f"like only supports str | Column, got {type(other)}")
+        other = self._resolve_type(other)
+        return Column(expression=LikeSome(self.expr, other.expr), alias=None)
+    
     def __neg__(self) -> Column:
         return Column(expression=NegatedExpression(self.expr), alias=None)
     
-    def __add__(self, other: str | int | float | bool | Column) -> Column:
-        other = self._resolve_type(other)
+    def __add__(self, other: int | float | Column) -> Column:
+        other = self._resolve_type(other, allowed_primitives=int | float)
         return Column(expression=Plus(self.expr, other.expr), alias=None)
     
-    def __sub__(self, other: str | int | float | bool | Column) -> Column:
-        other = self._resolve_type(other)
+    def __sub__(self, other: int | float | Column) -> Column:
+        other = self._resolve_type(other, allowed_primitives=int | float)
         return Column(expression=Minus(self.expr, other.expr), alias=None)
     
-    def __mul__(self, other: str | int | float | bool | Column) -> Column:
-        other = self._resolve_type(other)
+    def __mul__(self, other: int | float | Column) -> Column:
+        other = self._resolve_type(other, allowed_primitives=int | float)
         return Column(expression=Multiply(self.expr, other.expr), alias=None)
     
-    def __truediv__(self, other: str | int | float | bool | Column) -> Column:
-        other = self._resolve_type(other)
+    def __truediv__(self, other: int | float | Column) -> Column:
+        other = self._resolve_type(other, allowed_primitives=int | float)
         return Column(expression=Divide(self.expr, other.expr), alias=None)
     
-    def __mod__(self, other: str | int | float | bool | Column) -> Column:
-        other: Column = self._resolve_type(other)
-        expr =  _function_expressions.FunctionExpressionMOD(X=self.expr, Y=other.expr)
+    def __mod__(self, other: int | float | Column) -> Column:
+        other: Column = self._resolve_type(other, allowed_primitives=int | float)
+        expr = FunctionParams("MOD", 2).to_expression(False)(self.expr, other.expr)
         return Column(expression=expr, alias=None)
     
-    def __floordiv__(self, other: str | int | float | bool | Column) -> Column:
-        other = self._resolve_type(other)
+    def __floordiv__(self, other: int | float | Column) -> Column:
+        other = self._resolve_type(other, allowed_primitives=int | float)
         div_expr = Divide(self.expr, other.expr)
-        floor_expr = _function_expressions.FunctionExpressionFLOOR(X=div_expr)
-        return Column(expression=floor_expr, alias=None)
+        floor_expr = FunctionParams("FLOOR", 1).to_expression(False)(div_expr)
+        return Column(expression=floor_expr, alias=None) 
+    
+    def __pow__(self, other: int | float | Column) -> Column:
+        other = self._resolve_type(other, allowed_primitives=int | float)
+        pow_expr = FunctionParams("POWER", 2).to_expression(False)(self.expr, other.expr)
+        return Column(expression=pow_expr, alias=None)
+    
+    def __abs__(self) -> Column:
+        new_expr = FunctionParams("ABS", 1).to_expression(False)(self.expr)
+        return Column(expression=new_expr, alias=None)
     
     def __getitem__(self, index: int | str | PositionKeyword) -> Column:
         if not isinstance(index, int | str | PositionKeyword):

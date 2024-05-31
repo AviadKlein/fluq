@@ -76,7 +76,19 @@ class Expression(ABC):
     def tokens(self) -> List[str]:
         pass
 
-class TableNameExpression(Expression):
+class SelectableExpression(Expression):
+    """a base class for everything one can put in SELECT, WHERE, GROUP BY .... clauses"""
+    pass 
+
+class JoinableExpression(Expression):
+    """anything that can be joined"""
+    pass
+
+class QueryableExpression(JoinableExpression):
+    """abstract flag for queries of all types"""
+    pass
+
+class TableNameExpression(JoinableExpression):
 
     def __init__(self, db_path: ValidName | str):
         assert isinstance(db_path, ValidName | str), f"only supported ValidName | str, got {type(db_path)=}"
@@ -86,14 +98,9 @@ class TableNameExpression(Expression):
 
     def tokens(self) -> List[str]:
         return [self.db_path.name]
-
-class SelectableExpression(Expression):
-    """a base class for everything one can put in SELECT, WHERE, GROUP BY .... clauses"""
-    pass  
-
-class Queryable(Expression):
-    """abstract flag for queries of all types"""
-    pass
-
-class ResultSet:
+    
+class ResultSet(ABC):
     """a basic class to serve Frame and other Frame like classes - basically to help prevent circular imports"""
+
+    def _get_expr(self) -> Expression:
+        pass

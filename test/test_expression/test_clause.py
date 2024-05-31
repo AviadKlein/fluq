@@ -33,6 +33,11 @@ class TestClause(TestCase):
         select = SelectClauseExpression([],[]).add(LiteralExpression(1), 'a').add(ColumnExpression("b"))
         self.assertListEqual(select.tokens(), ['SELECT', '1', 'AS', 'a', ',', 'b'])
 
+    def test_select_distinct(self):
+        select = SelectClauseExpression.from_args((ColumnExpression("a"), None), (ColumnExpression("b"), None))
+        select = select.distinct()
+        self.assertListEqual(select.tokens(), ['SELECT', 'DISTINCT', 'a', ',', 'b'])
+
     def test_from_clause(self):
         fc = FromClauseExpression(table="db.schema.table1")
         self.assertEqual(fc.sql, "FROM db.schema.table1")

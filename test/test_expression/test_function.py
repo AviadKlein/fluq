@@ -6,15 +6,64 @@ from sparkit.expression.selectable import ColumnExpression, LiteralExpression
 
 class TestFunction(TestCase):
 
-    def test_dynamic_functions(self):
-        functions = SQLFunctionExpressions()
+    def test_functions_params_arg_num_is_int(self):
+        self.assertFalse(FunctionParams("MY_FUNC", 2).is_legit_number_of_args(0))
+        self.assertTrue(FunctionParams("MY_FUNC", 2).is_legit_number_of_args(2))
+        self.assertTrue(FunctionParams("MY_FUNC", 0).is_legit_number_of_args(0))
 
-        self.assertTrue('FunctionExpressionMOD' in functions.__dir__())
+        with self.assertRaises(TypeError) as cm:
+            FunctionParams("MY_FUNC", -2)
+        self.assertEqual("can't have int smaller than 0", str(cm.exception))
+        
 
-        result = functions.FunctionExpressionMOD(X=LiteralExpression(5), Y=LiteralExpression(3))
-        self.assertEqual(result.sql, "MOD(5, 3)")
-        self.assertEqual(result.tokens(), ["MOD(5, 3)"])
+    def test_functions_params_arg_num_is_none(self):
+        logic = FunctionParams("MY_FUNC", None)
+        self.assertTrue(logic.is_legit_number_of_args(2))
+        self.assertTrue(logic.is_legit_number_of_args(200))
+        self.assertTrue(logic.is_legit_number_of_args(0))
 
+        with self.assertRaises(AssertionError) as cm:
+            logic.is_legit_number_of_args(-1)
+
+    def test_functions_params_arg_num_is_list(self):
+        logic = FunctionParams("MY_FUNC", [2,5,6])
+        self.assertTrue(logic.is_legit_number_of_args(2))
+        self.assertTrue(logic.is_legit_number_of_args(5))
+        self.assertTrue(logic.is_legit_number_of_args(6))
+        self.assertFalse(logic.is_legit_number_of_args(7))
+
+    def test_functions_params_arg_num_is_list_with_none(self):
+        with self.assertRaises(TypeError) as cm:
+            FunctionParams("F", [None, None])
+        self.assertEqual("can't have more than 1 None in arg_num", str(cm.exception))
+
+        with self.assertRaises(TypeError) as cm:
+            FunctionParams("F", [None, 1, 2])
+        self.assertEqual("when passing [None, ...] to arg_num, there can be only 1 more int", str(cm.exception))
+
+        self.assertTrue(FunctionParams("F", [None, 1]).is_legit_number_of_args(1))
+        self.assertTrue(FunctionParams("F", [None, 1]).is_legit_number_of_args(2))
+        self.assertTrue(FunctionParams("F", [None, 1]).is_legit_number_of_args(200))
+
+        self.assertFalse(FunctionParams("F", [None, 3]).is_legit_number_of_args(2))
+        
+    def test_function_params_dynamic_creation(self):
+        fp = FunctionParams("F", 2)
+        f = fp.to_expression(False)(LiteralExpression(1), LiteralExpression(2))
+        self.assertEqual(str(type(f)), "<class 'abc.DynamicFunctionExpressionF'>")
+        self.assertListEqual(f.tokens(), ['F(', '1', ',', '2', ')'])
+
+    def test_all_functions_are_rendered(self):
+        expected_classes = []
+        for params in SQLFunctionExpressions._params():
+            expected_classes.append(params.clazz_name(False))
+            if params.supports_distinct:
+                expected_classes.append(params.clazz_name(True))
+        
+        actual_classes = [_ for _ in SQLFunctionExpressions().__dir__() if FunctionParams.clazz_prefix() in _]
+        self.assertEqual(len(actual_classes), len(expected_classes))
+        self.assertEqual(len(set(actual_classes)), len(set(expected_classes)))
+        
     def test_empty_case_expression(self):
         case = CaseExpression([])
 

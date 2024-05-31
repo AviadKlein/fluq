@@ -4,21 +4,21 @@ from typing import Optional, List
 from collections import Counter
 from abc import abstractmethod
 
-from sparkit.expression.base import Expression, TableNameExpression, ValidName, Queryable
-from sparkit.expression.operator import LogicalOperationExpression
+from sparkit.expression.base import Expression, TableNameExpression, ValidName, QueryableExpression, JoinableExpression
+from sparkit.expression.operator import LogicalOperationExpression, UnNestOperatorExpression
 
 
 class JoinOperationExpression(Expression):
     """a base class for all relational operations"""
 
     def __init__(self,
-                 left: TableNameExpression | Queryable | JoinOperationExpression,
-                 right: TableNameExpression | Queryable,
+                 left: JoinOperationExpression | JoinableExpression,
+                 right: JoinableExpression,
                  left_alias: Optional[str]=None,
                  right_alias: Optional[str]=None,
                  on: Optional[LogicalOperationExpression]=None):
-        assert isinstance(left, TableNameExpression | Queryable | JoinOperationExpression)
-        assert isinstance(right, TableNameExpression | Queryable)
+        assert isinstance(left, JoinOperationExpression | JoinableExpression)
+        assert isinstance(right, JoinableExpression)
         if on is not None:
             assert isinstance(on, LogicalOperationExpression)
 
@@ -30,10 +30,14 @@ class JoinOperationExpression(Expression):
 
         if isinstance(self.left, JoinOperationExpression):
             assert self.left_alias is None, f"JoinOperationExpression can't have an alias"
-        if isinstance(self.left, Queryable):
+        if isinstance(self.left, QueryableExpression):
             assert self.left_alias is not None, "left QueryExpression must have an alias"
-        if isinstance(self.right, Queryable):
+        if isinstance(self.right, QueryableExpression):
             assert self.right_alias is not None, "right QueryExpression must have an alias"
+        if isinstance(self.left, UnNestOperatorExpression):
+            assert self.left_alias is not None, "left UnNestOperatorExpression must have an alias"
+        if isinstance(self.right, UnNestOperatorExpression):
+            assert self.right_alias is not None, "right UnNestOperatorExpression must have an alias"
 
         
         # if both right and left aliases are not None assert they are not the same
@@ -106,7 +110,7 @@ class JoinOperationExpression(Expression):
             if alias is not None:
                 result = f"{result} AS {alias}"
             return result
-        elif isinstance(side, Queryable):
+        elif isinstance(side, QueryableExpression):
             return f"({side.sql}) AS {alias}"
         else:
             raise TypeError()       
@@ -123,12 +127,11 @@ class JoinOperationExpression(Expression):
                 raise TypeError(f"resolve tokens only works on 'left' or 'right', got {side}")
         
         result = side.tokens()
-        if isinstance(side, TableNameExpression | JoinOperationExpression):
-            
+        if isinstance(side, TableNameExpression | JoinOperationExpression | UnNestOperatorExpression):  
             if alias is not None:
                 result = [*result, 'AS', alias]
             return result
-        elif isinstance(side, Queryable):
+        elif isinstance(side, QueryableExpression):
             return ['(' ,*result, ')', 'AS', alias]
         else:
             raise TypeError()

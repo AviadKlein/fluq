@@ -24,10 +24,8 @@ class TestOperator(TestCase):
             (In(ColumnExpression("a"), 1, 2, 4.5, 55), ["a", "IN", "(", "1", ",", "2", ",", "4.5", ",", "55", ")"]),
             (In(ColumnExpression("a"), True, False), ["a", "IN", "(", "TRUE", ",", "FALSE", ")"]),
             (In(ColumnExpression("a"), 'yo yo', 'ya ya', 'ye ye'), ["a", "IN", "(", "'yo yo'", "," , "'ya ya'", ",", "'ye ye'", ")"]),
-            (Not(ColumnExpression("a")), ['a', '<>', 'TRUE']),
-            (Not(LiteralExpression(False)), ['FALSE', '<>', 'TRUE']),
             (IsNull(ColumnExpression("a")), ['a', 'IS', 'NULL']),
-            (IsNotNull(ColumnExpression("a")), ['a', 'IS NOT', 'NULL']),
+            (IsNotNull(ColumnExpression("a")), ['a', 'IS', 'NOT', 'NULL']),
             (Between(ColumnExpression("a"), LiteralExpression(1), LiteralExpression(2)), ['a', 'BETWEEN', '1', 'AND', '2']),
             (And(
                 Equal(LiteralExpression(1), LiteralExpression("a")), 

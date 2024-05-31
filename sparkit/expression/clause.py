@@ -5,7 +5,7 @@ from typing import List, Optional, Tuple
 from sparkit.expression.base import *
 from sparkit.expression.join import *
 from sparkit.expression.literals import OrderBySpecExpression
-from sparkit.expression.operator import LogicalOperationExpression, And, Or
+from sparkit.expression.operator import LogicalOperationExpression, And, Or, UnNestOperatorExpression
 from sparkit.expression.selectable import ColumnExpression
 
 
@@ -16,15 +16,29 @@ class ClauseExpression(Expression):
 
 class SelectClauseExpression(ClauseExpression):
 
-    def __init__(self, expressions: List[SelectableExpression], aliases: List[Optional[ValidName]]):
+    def __init__(self, expressions: List[SelectableExpression], aliases: List[Optional[ValidName]], distinct: bool= False):
         if len(expressions) != len(aliases):
             raise TypeError(f"got differing length of expressions: {len(expressions)} and aliases: {len(aliases)}, inputs were: {expressions=} and {aliases=}")
         self.expressions = []
         self.aliases = []
+        self._distinct = distinct
         for arg in zip(expressions, aliases):
             expr, alias = self._resolve_arg(arg)
             self.expressions.append(expr)
             self.aliases.append(alias)
+
+    def copy(self, expressions:Optional[List[SelectableExpression]]=None, 
+             aliases: Optional[List[Optional[ValidName]]]=None, 
+             distinct: Optional[bool]=None) -> SelectClauseExpression:
+        return SelectClauseExpression(
+            expressions=self.expressions if expressions is None else expressions,
+            aliases=self.aliases if aliases is None else aliases,
+            distinct=self._distinct if distinct is None else distinct
+        )
+    
+    def distinct(self) -> SelectableExpression:
+        return self.copy(distinct=True)
+        
 
     @property
     def _has_wilcard(self) -> bool:
@@ -104,7 +118,8 @@ class SelectClauseExpression(ClauseExpression):
                 exprs.append(element)
         if exprs[0] == ',':
             exprs = exprs[1:]
-        return ['SELECT', *exprs]
+        header = ['SELECT'] if not self._distinct else ['SELECT', 'DISTINCT']
+        return [*header, *exprs]
 
     
 class FromClauseExpression(ClauseExpression):
@@ -123,6 +138,9 @@ class FromClauseExpression(ClauseExpression):
     >>>    FromClauseExpression(table="db.schema.table1", alias="A")
     >>>         .join(table="db.schema.table2", alias="B", join_type="inner", on=[LogicalExpression...])
     >>>    )
+
+    use UNNEST operators as tables:
+    >>> fc = FromClauseExpression(table=UnNestOperatorExpression(...), alias="arr")
 
     with expressions:
     >>> fc = FromClauseExpression(table=TableNameExpression("db.schema.table1"), alias="A")
@@ -143,7 +161,7 @@ class FromClauseExpression(ClauseExpression):
                 match key:
                     case 'table' | 'join_expression' :
                         item = kwargs[key]
-                        assert isinstance(item, str | TableNameExpression | JoinOperationExpression)
+                        assert isinstance(item, str | TableNameExpression | JoinOperationExpression | UnNestOperatorExpression)
                         if isinstance(item, str):
                             item = TableNameExpression(item)
                         self.from_item = item
@@ -154,18 +172,18 @@ class FromClauseExpression(ClauseExpression):
                 key1, key2 = list(kwargs.keys())
                 match (key1, key2):
                     case ('table', 'alias'):
-                        table = kwargs[key1]
+                        table_like = kwargs[key1]
                         alias = kwargs[key2]
-                        assert isinstance(table, str | TableNameExpression)
-                        if isinstance(table, str):
-                            table = TableNameExpression(table)
+                        assert isinstance(table_like, str | TableNameExpression | UnNestOperatorExpression)
+                        if isinstance(table_like, str):
+                            table_like = TableNameExpression(table_like)
                         assert isinstance(alias, str)
                         self._alias = ValidName(alias)
-                        self.from_item = table
+                        self.from_item = table_like
                     case ('query', 'alias'):
                         query = kwargs[key1]
                         alias = kwargs[key2]
-                        assert isinstance(query, Queryable)
+                        assert isinstance(query, QueryableExpression)
                         assert isinstance(alias, str)
                         self._alias = ValidName(alias)
                         self.from_item = query
@@ -253,7 +271,7 @@ class FromClauseExpression(ClauseExpression):
     
     def tokens(self) -> List[str]:
         from_item_tkns = self.from_item.tokens()
-        if isinstance(self.from_item, Queryable):
+        if isinstance(self.from_item, QueryableExpression):
             from_item_tkns = ['(',*from_item_tkns,')']
         if self.alias is not None:
             from_item_tkns = [*from_item_tkns, 'AS', self.alias]

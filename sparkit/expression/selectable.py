@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Tuple
 from sparkit.expression.base import Expression, SelectableExpression, ValidName
 
 
@@ -135,5 +135,38 @@ class TupleExpression(SelectableExpression):
 
 
 class StructExpression(SelectableExpression):
-    pass
-
+    
+    def __init__(self, *exprs: SelectableExpression | Tuple[SelectableExpression, str]):
+        self.exprs = []
+        self.field_names = []
+        for expr in list(exprs):
+            if isinstance(expr, SelectableExpression):
+                self.exprs.append(expr)
+                self.field_names.append(None)
+            elif isinstance(expr, tuple):
+                if isinstance(expr[0], SelectableExpression) and isinstance(expr[1], str):
+                    alias = ValidName(expr[1])
+                    self.exprs.append(expr[0])
+                    self.field_names.append(alias.name)
+                elif isinstance(expr[0], SelectableExpression) and expr[1] is None:
+                    self.exprs.append(expr[0])
+                    self.field_names.append(None)
+                else:
+                    raise TypeError()
+            else:
+                raise TypeError()
+        
+    def tokens(self) -> List[str]:
+        zipped = zip(self.exprs, self.field_names)
+        result = []
+        for e, fn in zipped:
+            if fn is None:
+                elem = e.tokens()
+            else:
+                elem = [*e.tokens(), 'AS', fn]
+            if len(result) == 0:
+                result = elem
+            else:
+                result = [*result, ',', *elem]
+        return ['STRUCT(', *result, ')']
+        

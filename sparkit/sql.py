@@ -6,7 +6,7 @@ from sparkit.expression.function import *
 from sparkit.expression.clause import *
 from sparkit.expression.query import *
 from sparkit.column import Column
-from sparkit.expression.selectable import AnyExpression, ArrayExpression, ColumnExpression, JSONExpression, LiteralExpression, TupleExpression
+from sparkit.expression.selectable import *
 from sparkit.frame import Frame
 
 
@@ -67,7 +67,7 @@ def json(json_str: str) -> Column:
         else:
             raise SyntaxError(f"not a valid JSON: '{json_str}'")
     
-def tup(*args: int | float | str | bool | Column) -> Column:
+def tup(*cols: int | float | str | bool | Column) -> Column:
     """create tuples of columns literal
     
     Usage:
@@ -76,7 +76,7 @@ def tup(*args: int | float | str | bool | Column) -> Column:
     
     """
     exprs = []
-    for arg in args:
+    for arg in cols:
         if isinstance(arg, int | float | str | bool):
             exprs.append(LiteralExpression(arg))
         elif isinstance(arg, Column):
@@ -86,10 +86,41 @@ def tup(*args: int | float | str | bool | Column) -> Column:
         
     new_expr = TupleExpression(*exprs)
     return Column(expression=new_expr, alias=None)
-    
-        
+
+def struct(*cols: int | float | str | bool | Column) -> Column:
+    exprs = []
+    aliases = []
+    for arg in cols:
+        if isinstance(arg, int | float | str | bool):
+            exprs.append(LiteralExpression(arg))
+            aliases.append(None)
+        elif isinstance(arg, Column):
+            exprs.append(arg.expr)
+            aliases.append(arg.alias)
+        else:
+            raise TypeError(f"arg must be int | float | str | bool | Column, got {type(arg)}")
+    zipped = list(zip(exprs, aliases))
+    return Column(expression=StructExpression(*zipped), alias=None)
+
+def exists(query: Frame) -> Column:
+    expr = ExistsOperatorExpression(query=query._query_expr)
+    return Column(expression=expr, alias=None)
 
 
+def select(*cols: int | float | str | bool | Column) -> Frame:
+    """returns a SELECT frame with no FROM"""
+    expressions = []
+    aliases = []
+    for col in cols:
+        if isinstance(col, int | float | str | bool):
+            expressions.append(LiteralExpression(col))
+            aliases.append(None)
+        elif isinstance(col, Column):
+            expressions.append(col.expr)
+            aliases.append(col.alias)
+    select_expr = SelectClauseExpression(expressions=expressions, aliases=aliases)
+    query=QueryExpression(select_clause=select_expr)
+    return Frame(queryable_expression=query)
 
 def expr(expression: str) -> Column:
     """in case sparkit does not support a specific function or a handler
@@ -116,14 +147,17 @@ def when(condition: Column, value: Any) -> Column:
         raise TypeError()
     return Column(expression=CaseExpression([(condition.expr, value)]), alias=None)
 
-def table(db_path: str) -> Frame:
+def table(obj: str | Column) -> Frame:
     """create a Frame from a pointer to a physical table
     
     this is the most recommended way to initialize a Frame object, 
     as using the Expression api a much harder approach
     
     Arguments:
-        db_path: str - the physical name of the table (is checked by ValidName)
+        obj: Either a str - the physical name of the table (is checked by ValidName)
+            Or a Column object whose expr is an UnNestOperatorExpression
+            For example: 
+            >>> table(unnest(array(1,2,3)))
 
     Examples:
         >>> clients = table("db.schema.clients").as_("c")
@@ -137,37 +171,56 @@ def table(db_path: str) -> Frame:
             FROM db.schema.clients AS c LEFT OUTER JOIN db.schema.payments as p ON c.id = p.client_id
     
     """
-    from_clause = FromClauseExpression(table=TableNameExpression(db_path))
-    select_clause = SelectClauseExpression.from_args(ColumnExpression("*"))
-    query = QueryExpression(from_clause=from_clause, select_clause=select_clause)
+    match obj:
+        case str(_):
+            from_clause = FromClauseExpression(table=TableNameExpression(obj))    
+        case Column():
+            match obj.expr:
+                case UnNestOperatorExpression(_):
+                    from_clause = FromClauseExpression(table=obj.expr)
+                case _:
+                    raise SyntaxError("can't use a column that is not using UNNEST")
+    query = QueryExpression(from_clause=from_clause, select_clause=SelectClauseExpression.wildcard())
     return Frame(queryable_expression=query)
+
+def unnest(obj: Column | ResultSet) -> Column:
+    match obj:
+        case Column():
+            expr = UnNestOperatorExpression(obj.expr)
+        case ResultSet():
+            expr = UnNestOperatorExpression(obj._get_expr())
+        case _:
+            raise TypeError()
+    return Column(expression=expr, alias=None)
+    
 
 class SQLFunctions:
     
-    def create_dynamic_method(self, symbol: str, arguments: List[str]):
+    def create_dynamic_method(self, params: FunctionParams, is_distinct: bool=False):
         
-        def f(*cols: Column) -> Column:
+        def f(*cols: int | float | str | bool | Column) -> Column:
             cols = list(cols)
-            if not (len(cols) == len(arguments)):
-                raise TypeError(f"number of inputs ({len(cols)}) is different from number of expected arguments ({len(arguments)})")
-            if not all([isinstance(col, Column) for col in cols]):
-                raise TypeError("all inputs need to be columns")
-            kwargs = {arg: x.expr for arg, x in zip(arguments, cols)}
-            clazz = f"FunctionExpression{symbol}"
-            clazz = getattr(self.function_expressions, clazz)
-            instance: AbstractFunctionExpression = clazz(**kwargs)
+            exprs = []
+            for col in cols:
+                if isinstance(col, int | float | str | bool):
+                    exprs.append(LiteralExpression(col))
+                elif isinstance(col, Column):
+                    exprs.append(col.expr)
+                else:
+                    raise TypeError(f"unsupported type: {type(col)}")
+            clazz = getattr(self.function_expressions, params.clazz_name(is_distinct))
+            instance: AbstractFunctionExpression = clazz(*exprs)
             return Column(expression=instance, alias=None)
         
         return f
 
-    def __init__(self, set_global: bool=False):
+    def __init__(self):
         self.function_expressions = SQLFunctionExpressions()
-        for symbol, arguments, _ in self.function_expressions._params():
-            f = self.create_dynamic_method(symbol, arguments)
-            if set_global:
-                import __main__
-                setattr(__main__, symbol.lower(), f)
-            else:
-                setattr(self, symbol.lower(), f)
+        for params in self.function_expressions._params():
+            f = self.create_dynamic_method(params=params)
+            setattr(self, params.symbol.lower(), f)
+            if params.supports_distinct:
+                f = self.create_dynamic_method(params=params, is_distinct=True)
+                setattr(self, f"{params.symbol.lower()}_distinct", f)
 
-functions = SQLFunctions(False)
+functions = SQLFunctions()

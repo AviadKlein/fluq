@@ -90,6 +90,20 @@ class TestFrame(TestCase):
         expected = "SELECT age > 10 AS above_10, gender = 'male' AS is_male FROM t1"
         self.assertEqual(expected, result)
 
+    def test_select_distinct(self):
+        frame = table("t1").select("a", "b", "c").distinct()
+        expected = 'SELECT DISTINCT a, b, c FROM t1'
+        result = frame.sql
+        self.assertEqual(expected, result)
+
+    def test_select_distinct_from_set_operation(self):
+        with self.assertRaises(SyntaxError) as cm:
+            table("t1").union_all(table("t2")).distinct()
+        self.assertEqual("querying over set operations requires an alias", str(cm.exception))
+
+        query = table("t1").union_all(table("t2")).as_("t").distinct()
+        self.assertEqual(query.sql, "SELECT DISTINCT * FROM ( SELECT * FROM t1 UNION ALL SELECT * FROM t2 ) AS t")
+
     def test_where(self):
         frame = table("t1").where((col("age") > 18) & (col("salary") < 50000)).select("id")
         result = frame.sql
@@ -167,7 +181,7 @@ class TestFrame(TestCase):
              .agg(functions.sum(col("value")).as_("total_value"))
          )
          expected = [
-             'SELECT customer_id, date, SUM(value) AS total_value', 
+             'SELECT customer_id, date, SUM( value ) AS total_value', 
              'FROM db.schema.payments', 
              'GROUP BY customer_id, date']
          self.assertListEqual(result.sql(context2config=break_on_context_change).split('\n'), expected)

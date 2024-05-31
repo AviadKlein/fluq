@@ -4,13 +4,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, List
 
-from sparkit.expression.base import Queryable
+from sparkit.expression.base import QueryableExpression, JoinableExpression
 from sparkit.expression.clause import FromClauseExpression, WhereClauseExpression, \
     GroupByClauseExpression, SelectClauseExpression, HavingClauseExpression, QualifyClauseExpression, \
     OrderByClauseExpression, LimitClauseExpression, ClauseExpression
 
 @dataclass
-class QueryExpression(Queryable):
+class QueryExpression(QueryableExpression):
     from_clause: Optional[FromClauseExpression]=None
     where_clause: Optional[WhereClauseExpression]=None
     group_by_clause: Optional[GroupByClauseExpression]=None

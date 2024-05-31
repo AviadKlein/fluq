@@ -4,14 +4,14 @@ from abc import abstractclassmethod
 from dataclasses import dataclass
 from typing import List, Optional
 
-from sparkit.expression.base import Queryable
+from sparkit.expression.base import QueryableExpression
 from sparkit.expression.query import QueryExpression
 
 # set operations    
 @dataclass
-class SetOperation(Queryable):
-    left: Queryable
-    right: Queryable
+class SetOperation(QueryableExpression):
+    left: QueryableExpression
+    right: QueryableExpression
 
     @abstractclassmethod
     def symbol() -> str:

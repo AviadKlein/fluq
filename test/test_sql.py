@@ -1,4 +1,5 @@
 from sparkit.sql import *
+from sparkit.sql import functions as fn
 
 from unittest import TestCase
 
@@ -57,6 +58,39 @@ class TestSql(TestCase):
             (col("age") - col("years_since_joined")).as_("`age when joined`")
         )
         self.assertEqual(t.sql, """SELECT id, first_name = 'john' AS is_john, last_name = 'doe' AS is_doe, age - years_since_joined AS `age when joined` FROM db.schema.customers""")
+
+    def test_select(self):
+        self.assertEqual(select(1,2,3).sql, "SELECT 1, 2, 3")
+        self.assertEqual(select(1,lit(5),3).sql, "SELECT 1, 5, 3")
+        self.assertEqual(select(array(1, 3).as_("arr")).sql, "SELECT [ 1, 3 ] AS arr")
+
+    def test_exists(self):
+        t = select(exists(table("t1").select("a", "b")).as_("result"))
+        self.assertEqual(t.sql, "SELECT EXISTS ( SELECT a, b FROM t1 ) AS result")
+
+    
+    def test_struct(self):
+        self.assertEqual(select(struct(1,2)).sql, "SELECT STRUCT( 1, 2 )")
+        self.assertEqual(select(struct(1,lit(2).as_("A"))).sql, "SELECT STRUCT( 1, 2 AS A )")
+        self.assertEqual(select(struct(1,lit(2).as_("A"), struct(col("name").as_("name"), col("age").as_("age")))).sql, 
+                         "SELECT STRUCT( 1, 2 AS A, STRUCT( name AS name, age AS age ) )")
+        
+    def test_unnest_in_select(self):
+        query = table("t1").select(col("id"), unnest(col("arr")).as_("arr"))
+        self.assertEqual(query.sql, "SELECT id, UNNEST( arr ) AS arr FROM t1")
+
+    def test_unnest_in_from(self):
+        query = table(unnest(array(1,2,3)))
+        self.assertEqual(query.sql, "SELECT * FROM UNNEST( [ 1, 2, 3 ] )")
+
+    def test_unnest_in_join(self):
+        query = table("t1").as_("t1").cartesian(unnest(array(1,2,3)).as_("arr"))
+        self.assertEqual(query.sql, "SELECT * FROM t1 AS t1 CROSS JOIN UNNEST( [ 1, 2, 3 ] ) AS arr")
+
+    def test_coalesce(self):
+        self.assertEqual(select(fn.coalesce(col("a"), col("b"), 0).as_("result")).sql, "SELECT COALESCE( a, b, 0 ) AS result")
+
+    
 
 
 
