@@ -4,7 +4,7 @@ from abc import abstractclassmethod
 from dataclasses import dataclass
 from typing import List, Optional
 
-from sparkit.expression.base import Expression, SelectableExpression
+from fluq.expression.base import Expression, SelectableExpression
 
 
 class DateTimePart(Expression):

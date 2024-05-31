@@ -1,10 +1,10 @@
 [project]
-name = "sparkit_aviad.klein"
+name = "fluq"
 version = "0.1.0"
 authors = [
   { name="Aviad Klein", email="aviad.klein@gmail.com" },
 ]
-description = "A set of utilities and an intuitive API for constructing SQL queries programmatically"
+description = "FLUent Queries - A set of utilities and an intuitive API for constructing SQL queries programmatically"
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [
@@ -14,7 +14,7 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/AviadKlein/sparkit"
+Homepage = "https://github.com/AviadKlein/fluq"
 
 [build-system]
 requires = ["setuptools", "wheel"]  # PEP 508 specifications.

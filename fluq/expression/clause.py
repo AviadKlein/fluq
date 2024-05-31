@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
-from sparkit.expression.base import *
-from sparkit.expression.join import *
-from sparkit.expression.literals import OrderBySpecExpression
-from sparkit.expression.operator import LogicalOperationExpression, And, Or, UnNestOperatorExpression
-from sparkit.expression.selectable import ColumnExpression
+from fluq.expression.base import *
+from fluq.expression.join import *
+from fluq.expression.literals import OrderBySpecExpression
+from fluq.expression.operator import LogicalOperationExpression, And, Or, UnNestOperatorExpression
+from fluq.expression.selectable import ColumnExpression
 
 
 

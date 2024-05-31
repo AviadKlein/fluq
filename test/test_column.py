@@ -1,9 +1,9 @@
 from unittest import TestCase
 
-from sparkit.column import *
-from sparkit.expression.literals import OrderBySpecExpression
-from sparkit.expression.selectable import ColumnExpression, LiteralExpression, NegatedExpression
-from sparkit.sql import *
+from fluq.column import *
+from fluq.expression.literals import OrderBySpecExpression
+from fluq.expression.selectable import ColumnExpression, LiteralExpression, NegatedExpression
+from fluq.sql import *
 
 
 class TestColumn(TestCase):

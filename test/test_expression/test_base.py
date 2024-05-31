@@ -1,7 +1,7 @@
 from unittest import TestCase
 
-from sparkit.expression.base import *
-from sparkit.expression.selectable import AnyExpression, ColumnExpression, LiteralExpression, NullExpression, TupleExpression
+from fluq.expression.base import *
+from fluq.expression.selectable import AnyExpression, ColumnExpression, LiteralExpression, NullExpression, TupleExpression
 
 class TestValidName(TestCase):
 

@@ -1,4 +1,4 @@
-# sparkit/expression/__init__.py
+# fluq/expression/__init__.py
 
 from .base import *
 from .clause import *

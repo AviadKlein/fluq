@@ -1,7 +1,7 @@
 from unittest import TestCase
 import textwrap
 
-from sparkit.render import *
+from fluq.render import *
 
 def compare_str(a: str, b: str):
         assert isinstance(a, str)

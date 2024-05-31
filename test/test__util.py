@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from sparkit._util import recursive_list_predicate_validation
+from fluq._util import recursive_list_predicate_validation
 
 class UtilTest(TestCase):
 

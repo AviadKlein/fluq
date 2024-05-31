@@ -1,13 +1,13 @@
 from typing import Any, List
 
-from sparkit._util import is_valid_json
-from sparkit.expression.base import *
-from sparkit.expression.function import *
-from sparkit.expression.clause import *
-from sparkit.expression.query import *
-from sparkit.column import Column
-from sparkit.expression.selectable import *
-from sparkit.frame import Frame
+from fluq._util import is_valid_json
+from fluq.expression.base import *
+from fluq.expression.function import *
+from fluq.expression.clause import *
+from fluq.expression.query import *
+from fluq.column import Column
+from fluq.expression.selectable import *
+from fluq.frame import Frame
 
 
 def col(name: str) -> Column:
@@ -123,7 +123,7 @@ def select(*cols: int | float | str | bool | Column) -> Frame:
     return Frame(queryable_expression=query)
 
 def expr(expression: str) -> Column:
-    """in case sparkit does not support a specific function or a handler
+    """in case fluq does not support a specific function or a handler
     one can use this method to create a Column holding an AnyExpression
     no further logical checks will happen until the sql is used
     

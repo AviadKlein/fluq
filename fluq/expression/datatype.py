@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import abstractclassmethod
 from typing import Any, List, Dict, Tuple
-from sparkit.expression.base import Expression, SelectableExpression
+from fluq.expression.base import Expression, SelectableExpression
 
 class DataTypeExpression(Expression):
     """

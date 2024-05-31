@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from sparkit.parse import *
+from fluq.parse import *
 
 class TestParsing(TestCase):
 

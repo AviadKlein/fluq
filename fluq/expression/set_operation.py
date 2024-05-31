@@ -4,8 +4,8 @@ from abc import abstractclassmethod
 from dataclasses import dataclass
 from typing import List, Optional
 
-from sparkit.expression.base import QueryableExpression
-from sparkit.expression.query import QueryExpression
+from fluq.expression.base import QueryableExpression
+from fluq.expression.query import QueryExpression
 
 # set operations    
 @dataclass

@@ -1,5 +1,5 @@
-from sparkit.sql import *
-from sparkit.sql import functions as fn
+from fluq.sql import *
+from fluq.sql import functions as fn
 
 from unittest import TestCase
 

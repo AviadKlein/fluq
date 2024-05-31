@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from abc import abstractmethod
 from typing import List
 
-from sparkit.expression.base import Expression, QueryableExpression, SelectableExpression, JoinableExpression
-from sparkit.expression.selectable import LiteralExpression, LiteralTypes, NullExpression
+from fluq.expression.base import Expression, QueryableExpression, SelectableExpression, JoinableExpression
+from fluq.expression.selectable import LiteralExpression, LiteralTypes, NullExpression
 
 @dataclass
 class AbstractOperationExpression(SelectableExpression):

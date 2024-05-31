@@ -4,8 +4,8 @@ from typing import Optional, List
 from collections import Counter
 from abc import abstractmethod
 
-from sparkit.expression.base import Expression, TableNameExpression, ValidName, QueryableExpression, JoinableExpression
-from sparkit.expression.operator import LogicalOperationExpression, UnNestOperatorExpression
+from fluq.expression.base import Expression, TableNameExpression, ValidName, QueryableExpression, JoinableExpression
+from fluq.expression.operator import LogicalOperationExpression, UnNestOperatorExpression
 
 
 class JoinOperationExpression(Expression):

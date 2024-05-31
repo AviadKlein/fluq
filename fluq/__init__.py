@@ -1,4 +1,4 @@
-# sparkit/__init__.py
+# fluq/__init__.py
 
 from .column import *
 from .sql import *

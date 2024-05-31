@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from typing import Tuple, Any
-from sparkit.expression.base import *
-from sparkit.expression.function import *
-from sparkit.expression.literals import *
-from sparkit.expression.operator import *
-from sparkit.expression.datatype import *
-from sparkit.expression.selectable import *
+from fluq.expression.base import *
+from fluq.expression.function import *
+from fluq.expression.literals import *
+from fluq.expression.operator import *
+from fluq.expression.datatype import *
+from fluq.expression.selectable import *
 
 class Column:
     """A container for SQL expressions in Frames

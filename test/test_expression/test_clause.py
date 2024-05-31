@@ -1,12 +1,12 @@
 from unittest import TestCase
 
-from sparkit.expression.base import *
-from sparkit.expression.literals import OrderBySpecExpression
-from sparkit.expression.operator import *
-from sparkit.expression.join import *
-from sparkit.expression.clause import *
-from sparkit.expression.query import QueryExpression
-from sparkit.expression.selectable import ColumnExpression, LiteralExpression
+from fluq.expression.base import *
+from fluq.expression.literals import OrderBySpecExpression
+from fluq.expression.operator import *
+from fluq.expression.join import *
+from fluq.expression.clause import *
+from fluq.expression.query import QueryExpression
+from fluq.expression.selectable import ColumnExpression, LiteralExpression
 
 class TestClause(TestCase):
     

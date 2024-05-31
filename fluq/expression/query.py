@@ -4,8 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, List
 
-from sparkit.expression.base import QueryableExpression, JoinableExpression
-from sparkit.expression.clause import FromClauseExpression, WhereClauseExpression, \
+from fluq.expression.base import QueryableExpression, JoinableExpression
+from fluq.expression.clause import FromClauseExpression, WhereClauseExpression, \
     GroupByClauseExpression, SelectClauseExpression, HavingClauseExpression, QualifyClauseExpression, \
     OrderByClauseExpression, LimitClauseExpression, ClauseExpression
 

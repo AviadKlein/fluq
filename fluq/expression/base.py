@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from sparkit.render import Renderable
+from fluq.render import Renderable
 
 from typing import List, Tuple
 from abc import ABC, abstractmethod

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from typing import Optional
-from sparkit.expression.base import *
-from sparkit.expression.query import QueryableExpression, QueryExpression
-from sparkit.expression.clause import *
-from sparkit.expression.join import *
-from sparkit.expression.selectable import ColumnExpression
-from sparkit.expression.set_operation import *
-from sparkit.column import Column
-from sparkit.render import Renderable
+from fluq.expression.base import *
+from fluq.expression.query import QueryableExpression, QueryExpression
+from fluq.expression.clause import *
+from fluq.expression.join import *
+from fluq.expression.selectable import ColumnExpression
+from fluq.expression.set_operation import *
+from fluq.column import Column
+from fluq.render import Renderable
 
 
 def copy_doc(source, preamble: Optional[str]=None):

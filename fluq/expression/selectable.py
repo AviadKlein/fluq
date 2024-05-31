@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import List, Tuple
-from sparkit.expression.base import Expression, SelectableExpression, ValidName
+from fluq.expression.base import Expression, SelectableExpression, ValidName
 
 
 class AnyExpression(SelectableExpression):

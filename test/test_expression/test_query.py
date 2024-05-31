@@ -1,12 +1,12 @@
 from __future__ import annotations
 from unittest import TestCase
 
-from sparkit.expression.base import *
-from sparkit.expression.operator import *
-from sparkit.expression.clause import *
-from sparkit.expression.function import *
-from sparkit.expression.query import *
-from sparkit.expression.selectable import ColumnExpression
+from fluq.expression.base import *
+from fluq.expression.operator import *
+from fluq.expression.clause import *
+from fluq.expression.function import *
+from fluq.expression.query import *
+from fluq.expression.selectable import ColumnExpression
 
 
 class TestQuery(TestCase):

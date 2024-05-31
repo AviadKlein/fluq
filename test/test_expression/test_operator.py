@@ -1,10 +1,10 @@
 from unittest import TestCase
 
-from sparkit.expression.base import *
-from sparkit.expression.operator import *
-from sparkit.expression.query import QueryExpression
-from sparkit.expression.clause import FromClauseExpression, SelectClauseExpression
-from sparkit.expression.selectable import ColumnExpression, LiteralExpression
+from fluq.expression.base import *
+from fluq.expression.operator import *
+from fluq.expression.query import QueryExpression
+from fluq.expression.clause import FromClauseExpression, SelectClauseExpression
+from fluq.expression.selectable import ColumnExpression, LiteralExpression
 
 class TestOperator(TestCase):
 

@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple, Dict
 from abc import abstractmethod
 
-from sparkit.expression.base import *
-from sparkit.expression.literals import OrderBySpecExpression
-from sparkit.expression.operator import *
+from fluq.expression.base import *
+from fluq.expression.literals import OrderBySpecExpression
+from fluq.expression.operator import *
 
 
 @dataclass

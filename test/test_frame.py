@@ -1,8 +1,8 @@
 from unittest import TestCase
 
-from sparkit.frame import *
-from sparkit.sql import lit, col, functions, table
-from sparkit.render import RenderingContextConfig
+from fluq.frame import *
+from fluq.sql import lit, col, functions, table
+from fluq.render import RenderingContextConfig
 
 break_on_context_change = {
             'SELECT': RenderingContextConfig(break_on_change_context=True),

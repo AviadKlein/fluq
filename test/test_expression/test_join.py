@@ -1,11 +1,11 @@
 from unittest import TestCase
 
-from sparkit.expression.base import *
-from sparkit.expression.operator import *
-from sparkit.expression.join import *
-from sparkit.expression.clause import FromClauseExpression, SelectClauseExpression
-from sparkit.expression.query import QueryExpression
-from sparkit.expression.selectable import ColumnExpression
+from fluq.expression.base import *
+from fluq.expression.operator import *
+from fluq.expression.join import *
+from fluq.expression.clause import FromClauseExpression, SelectClauseExpression
+from fluq.expression.query import QueryExpression
+from fluq.expression.selectable import ColumnExpression
 
 class TestJoin(TestCase):
 
