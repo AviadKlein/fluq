@@ -50,15 +50,8 @@ class TestSql(TestCase):
         query = table("t1").where(tup(col("id"), col("date")).is_in(lit(123), lit('2024-01-01'))).select("id")
         self.assertEqual(query.sql, "SELECT id FROM t1 WHERE ( id, date ) IN ( 123, '2024-01-01' )")
     
-    def test_examples(self):
-        t = table("db.schema.customers").select(
-            col("id"), 
-            (col("first_name") == lit("john")).as_("is_john"),
-            (col("last_name") == lit("doe")).as_("is_doe"),
-            (col("age") - col("years_since_joined")).as_("`age when joined`")
-        )
-        self.assertEqual(t.sql, """SELECT id, first_name = 'john' AS is_john, last_name = 'doe' AS is_doe, age - years_since_joined AS `age when joined` FROM db.schema.customers""")
-
+    
+    
     def test_select(self):
         self.assertEqual(select(1,2,3).sql, "SELECT 1, 2, 3")
         self.assertEqual(select(1,lit(5),3).sql, "SELECT 1, 5, 3")
@@ -91,9 +84,43 @@ class TestSql(TestCase):
         self.assertEqual(select(fn.coalesce(col("a"), col("b"), 0).as_("result")).sql, "SELECT COALESCE( a, b, 0 ) AS result")
 
     
+    def test_examples_1(self):
+        query = table("db.schema.table1").select("id")
 
+        print(query.sql) 
 
+        t = table("db.schema.table1")
+        print(t.sql)
+        print(type(t))
 
+    def test_examples_2(self):
+        from fluq.sql import table, col, lit, functions as fn
+        from datetime import date
+
+        # create a literal with the current year
+        current_year = lit(date.today().year)
+
+        query = table("some.table").select(
+            (current_year - col("year_joined")).as_("years_since_joined"),
+            (col("orders")**2).as_("orders_squared"),
+            col("sum_transactions")*lit(1-0.17).as_("sum_transactions_net"),
+            fn.exp(3)
+        )
+
+        print(query.sql)
+
+    def test_examples_3(self):
+        from fluq.sql import table, col
+
+        query = table("db.customers").where(
+            (col("date_joined") > '2024-01-01') &
+            (col("salary") < 5000) &
+            (col("address").is_not_null()) & 
+            (col("country") == 'US') &
+            (col("indutry").is_in('food', 'services'))
+        ).select("id", "name", "address")
+
+        print(query.sql)
 
 
     

@@ -1,65 +1,142 @@
-# Spar-kit - Python style API for heavy SQL users
+# FLUQ (FLUent Queries) - Python style API for heavy SQL users
 
-Spark-kit provides a set of utilities and an intuitive API for constructing SQL queries programmatically, making it easier to build, read, and maintain complex SQL statements.
+FLUQ provides a set of utilities and an intuitive API for constructing SQL queries programmatically, making it easier to build, read, and maintain complex SQL statements.
 
 ## Installation
 
 ```sh
-pip install sparkit
+pip install fluq
 ```
 
 ## Usage
 
-Sparkit was built borrowing from its inspiring packages to write SQL from left to right. Although a query might look like this:
+Fluq was built borrowing from its inspiring packages to write SQL from left to right. 
+The package does not connect to data bases or run queries for the user, rather, it prevents users from having to create huge blobs of text that are hard to read, re-use and manage.
+
+Where usually a query might look like this:
 ```sql
 SELECT id -- starting from what columns we want
 FROM db.schema.table1 -- but we should start from where we want them
 ```
 
-### Simplest entry point `table` and `col`
-Sparkit allows you to start from sources:
+The fluq way goes logically left-to-right:
+```python
+from fluq.sql import *
+
+query = table("db.schema.table1").select("id")
+
+print(query.sql) # returns: SELECT id FROM db.schema.table1
+```
+
+### The API:
+
+### Starting from tables: `table` method
+
+Fluq allows you to start from sources
 
 ```python
-from sparkit.sql import table, col
-from sparkit.column import Column
+from fluq.sql import table
 
-t = table("db.schema.table1")
+query = table("db.schema.table1") # this defines a Frame object
+print(type(query)) 
+# Output: <class 'fluq.frame.Frame'>
+```
+`Frame` has many methods, among the rest is the `sql` property that renders the SQL code to run the query.
+
+```python
 print(t.sql)
 # Output: SELECT * FROM db.schema.table1
-
-t = table("db.schema.customers").select(col("id"), col("name"))
-print(t.sql)
-# Output: SELECT id, name FROM db.schema.customers
-
-# declaring columns as objects
-customer_id: Column = col("id")
 ```
 
-### Operators and literals
+#### Select specific columns
+```python
+from fluq.sql import table, col
 
-All the basic python operators can be used on the `Column` object: `==,!=,>,>=,<.<=,&,|,+,-,...`
+query = table("db.schema.table1").select("id", "name")
+```
+
+Or, by using the `col` method:
+```python
+query = table("db.schema.table1").select(col("id"), col("name"))
+```
+
+By using `col`, we get back a `Column` object, that allows to perform multiple operations over columns among the rest we can give them a different alias:
 
 ```python
-from sparkit.sql import table, col, lit
+query = table("db.schema.table1").select(
+    col("id").as_("`customer id`"), 
+    col("name").as_("`customer name`"))
 
-query = table("db.schema.customers").select(
-        col("id"), 
-        (col("first_name") == lit("john")).as_("is_john"),
-        (col("last_name") == lit("doe")).as_("is_doe"),
-        (col("age") - col("years_since_joined")).as_("age when joined")
-    )
 print(query.sql)
-# Output: SELECT id, first_name = 'john' AS is_john, last_name = 'doe' AS is_doe, age - years_since_joined AS `age when joined` FROM db.schema.customers
+# Output: SELECT id AS `customer id`, name AS `customer name` FROM db.schema.table1
 ```
 
-### Joins:
+
+### Specifying columns and literals
+
+* `col` - a method to represent a column by name
+* `lit` - a method to represent primitives (`str`, `bool`, `int`, `float`) as SQL literals
+* `select` - standalone method to select without a FROM clause (good for examples)
+
 ```python
-t1 = table("db.schema.table1").as_("t1")
-t2 = table("db.schema.table2").as_("t2")
-inner = t1.join(t2, col("t1.id") == col("t2.id"))
-print(inner.sql)
-# Output: SELECT * FROM db.schema.table1 AS t1 INNER JOIN db.schema.table2 AS t2 ON t1.id = t2.id
+from fluq.sql import select, col, lit
+
+query = select(col("a"))
+print(type(query)) 
+# Output: <class 'fluq.frame.Frame'>
+
+print(query.sql)
+# Output: SELECT a -- will result in an error over any db since "a" is not defined
 ```
+
+### Selecting literals using `lit`
+```python
+from fluq.sql import select, lit
+
+query = select(lit(2).as_("two"))
+
+print(query.sql)
+# Output: SELECT 2 AS two
+```
+
+### Arithmetics and functions:
+
+```python
+from fluq.sql import table, col, lit, functions as fn
+from datetime import date
+
+# create a literal with the current year
+current_year = lit(date.today().year)
+
+query = table("some.table").select(
+    (current_year - col("year_joined")).as_("years_since_joined"),
+    (col("orders")**2).as_("orders_squared"),
+    col("sum_transactions")*lit(1-0.17).as_("sum_transactions_net"),
+    fn.exp(3)
+)
+
+print(query.sql)
+# Output: SELECT 2024 - year_joined AS years_since_joined, POWER( orders, 2 ) AS orders_squared, sum_transactions * 0.83, EXP( 3 ) FROM some.table
+```
+
+### Logical operators: `==, >, >=, <>, <, <=, &, |`:
+```python
+from fluq.sql import table, col
+
+query = table("db.customers").where(
+    (col("date_joined") > '2024-01-01') &
+    (col("salary") < 5000) &
+    (col("address").is_not_null()) & 
+    (col("country") == 'US') &
+    (col("indutry").is_in('food', 'services'))
+).select("id", "name", "address")
+
+print(query.sql)
+# Output: SELECT id, name, address FROM db.customers WHERE ( ( ( ( date_joined > '2024-01-01' ) AND ( salary < 5000 ) ) AND ( address IS NOT NULL ) ) AND ( country = 'US' ) ) AND ( indutry IN ( 'food', 'services' ) )
+```
+
+NOTE: the `__eq__` magic method was 'kidnapped' in order to have a very python like approach. This is not void of potential issues. When comparing `Column` objects, use the `_equals` method instead of `==`.
+
 
 ## Inspiration and rationale
 
@@ -75,7 +152,7 @@ Version 0.1.0 was built over BigQuery syntax, with the aim of supporting more fl
 ## Contributing
 
 Please be aware of the package dependency structure:
-![dependency structure](/sparkit/module%20relationship.png)
+![dependency structure](/fluq/module%20relationship.png)
 
 ## License
 
