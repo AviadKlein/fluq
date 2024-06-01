@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from abc import abstractclassmethod
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Callable, List, Optional
 
-from fluq.expression.base import QueryableExpression
+from fluq.expression.base import Expression, QueryableExpression
 from fluq.expression.query import QueryExpression
 
 # set operations    
@@ -48,6 +48,15 @@ class SetOperation(QueryableExpression):
                 parenthesis_cnt += 1
                 result = [*result, obj.symbol(), '(']
         result += [')']*parenthesis_cnt
+        return result
+    
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        exprs = [self.left, self.right]
+        for expr in exprs:
+            if predicate(expr):
+                result.append(expr)
+            result = [*result, *expr.filter(predicate)]
         return result
         
 @dataclass

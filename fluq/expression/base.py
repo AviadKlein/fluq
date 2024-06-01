@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fluq.render import Renderable
 
-from typing import List, Tuple
+from typing import List, Tuple, Callable
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import string
@@ -76,6 +76,15 @@ class Expression(ABC):
     def tokens(self) -> List[str]:
         pass
 
+    @abstractmethod
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        pass
+
+class TerminalExpression(Expression):
+
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        return []
+
 class SelectableExpression(Expression):
     """a base class for everything one can put in SELECT, WHERE, GROUP BY .... clauses"""
     pass 
@@ -88,7 +97,7 @@ class QueryableExpression(JoinableExpression):
     """abstract flag for queries of all types"""
     pass
 
-class TableNameExpression(JoinableExpression):
+class TableNameExpression(JoinableExpression, TerminalExpression):
 
     def __init__(self, db_path: ValidName | str):
         assert isinstance(db_path, ValidName | str), f"only supported ValidName | str, got {type(db_path)=}"
@@ -98,6 +107,7 @@ class TableNameExpression(JoinableExpression):
 
     def tokens(self) -> List[str]:
         return [self.db_path.name]
+
     
 class ResultSet(ABC):
     """a basic class to serve Frame and other Frame like classes - basically to help prevent circular imports"""

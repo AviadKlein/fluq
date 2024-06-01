@@ -212,6 +212,17 @@ class TestFrame(TestCase):
             'LIMIT 5']
         self.assertListEqual(result, expected)
 
+    def test_source_table_names(self):
+        query = (
+            table("t1").as_("t1").join(table("t2").as_("t2"), on=col("id1") == col("id2"), join_type='inner')
+            .where(col("fk").is_in(table("t3").where(col("condition") == 1).select("id")))
+        )
+        result = query.source_table_names()
+        for t in ['t1', 't2', 't3']:
+            self.assertTrue(t in result)
+        
+        
+
         
 
 

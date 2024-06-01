@@ -55,12 +55,12 @@ class TestFunction(TestCase):
 
     def test_all_functions_are_rendered(self):
         expected_classes = []
-        for params in SQLFunctionExpressions._params():
+        for params in SQLFunctionsGenerator._params():
             expected_classes.append(params.clazz_name(False))
             if params.supports_distinct:
                 expected_classes.append(params.clazz_name(True))
         
-        actual_classes = [_ for _ in SQLFunctionExpressions().__dir__() if FunctionParams.clazz_prefix() in _]
+        actual_classes = [_ for _ in SQLFunctionsGenerator().__dir__() if FunctionParams.clazz_prefix() in _]
         self.assertEqual(len(actual_classes), len(expected_classes))
         self.assertEqual(len(set(actual_classes)), len(set(expected_classes)))
         

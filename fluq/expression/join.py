@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, List
+from typing import Callable, Optional, List
 from collections import Counter
 from abc import abstractmethod
 
@@ -147,6 +147,18 @@ class JoinOperationExpression(Expression):
         right: List[str] = self.resolve_tokens("right")
         on_clause: List[str] = self.resolve_on_clause_tokens()
         return [*left, self.operator(), *right, *on_clause]
+    
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        if predicate(self.left):
+            result.append(self.left)
+        result = [*result, *self.left.filter(predicate)]
+        if predicate(self.right):
+            result.append(self.right)
+        result = [*result, *self.right.filter(predicate)]
+        return result
+
+
 
 
 class InnerJoinOperationExpression(JoinOperationExpression):

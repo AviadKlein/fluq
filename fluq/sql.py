@@ -132,12 +132,12 @@ def expr(expression: str) -> Column:
 
     return Column(expression=AnyExpression(expr=expression), alias=None)
 
-def when(condition: Column, value: Any) -> Column:
+def when(condition: Column, value: int | float | str | bool | Column) -> Column:
     """
     Usage:
     >>> case = when(col.equal(2), "a").when(col.equal(3), "b").otherwise("c")
     """
-    if isinstance(value, (int, float, str, bool)):
+    if isinstance(value, int | float | str | bool):
         value = LiteralExpression(value)
     elif isinstance(value, Column):
         value = value.expr
@@ -145,7 +145,7 @@ def when(condition: Column, value: Any) -> Column:
         pass
     else:
         raise TypeError()
-    return Column(expression=CaseExpression([(condition.expr, value)]), alias=None)
+    return Column(expression=CaseExpression(cases=[(condition.expr, value)]), alias=None)
 
 def table(obj: str | Column) -> Frame:
     """create a Frame from a pointer to a physical table
@@ -215,7 +215,7 @@ class SQLFunctions:
         return f
 
     def __init__(self):
-        self.function_expressions = SQLFunctionExpressions()
+        self.function_expressions = SQLFunctionsGenerator()
         for params in self.function_expressions._params():
             f = self.create_dynamic_method(params=params)
             setattr(self, params.symbol.lower(), f)

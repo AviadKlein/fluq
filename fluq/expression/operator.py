@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from abc import abstractmethod
-from typing import List
+from typing import Callable, List
 
 from fluq.expression.base import Expression, QueryableExpression, SelectableExpression, JoinableExpression
 from fluq.expression.selectable import LiteralExpression, LiteralTypes, NullExpression
@@ -16,12 +16,12 @@ class AbstractOperationExpression(SelectableExpression):
 
     etc.
     """
-    left: Expression
-    right: Expression
+    left: SelectableExpression
+    right: SelectableExpression
     
     def __post_init__(self):
-        assert isinstance(self.left, Expression)
-        assert isinstance(self.right, Expression)
+        assert isinstance(self.left, SelectableExpression)
+        assert isinstance(self.right, SelectableExpression)
     
     @property
     def _wrap_left(self) -> bool:
@@ -51,6 +51,16 @@ class AbstractOperationExpression(SelectableExpression):
 
     def __hash__(self) -> int:
         return hash(self.__class__.__name__ + ''.join(self.tokens()))
+    
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        if predicate(self.left):
+            result.append(self.left)
+        result = [*result, *self.left.filter(predicate)]
+        if predicate(self.right):
+            result.append(self.right)
+        result = [*result, *self.right.filter(predicate)]
+        return result
 
 
 class LogicalOperationExpression(AbstractOperationExpression):
@@ -106,9 +116,9 @@ class LessOrEqual(LogicalOperationExpression):
 
 class In(LogicalOperationExpression):
 
-    def __init__(self, left: Expression, 
-                 *args: Expression | LiteralTypes | QueryableExpression):
-        assert isinstance(left, Expression)
+    def __init__(self, left: SelectableExpression, 
+                 *args: SelectableExpression | LiteralTypes | QueryableExpression):
+        assert isinstance(left, SelectableExpression)
         self.left = left
         self.is_query = False
 
@@ -127,7 +137,7 @@ class In(LogicalOperationExpression):
             all([isinstance(_, str) for _ in args]):
             self._list = [LiteralExpression(_) for _ in args]
         else:
-            msg = "list of expressions can be Expression | LiteralTypes | FutureExpression"
+            msg = "list of expressions can be SelectableExpression | LiteralTypes"
             msg += "\n"
             msg += f"{args} has types: ({[type(_) for _ in args]}), respectively"
             raise TypeError(msg)
@@ -146,6 +156,22 @@ class In(LogicalOperationExpression):
             zipped = zip(resolved_tokens[:-1], [',']*(len(resolved_tokens)-1))
             resolved_tokens = [elem for pair in zipped for elem in pair] + [last_token]
             return [*self.left.tokens(), self.op_str, '(', *resolved_tokens, ')']
+        
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        if predicate(self.left):
+            result.append(self.left)
+        result = [*result, *self.left.filter(predicate)]
+        if self.is_query:
+            if predicate(self.query):
+                result.append(self.query)
+            result = [*result, *self.query.filter(predicate)]
+        else:
+            for expr in self._list:
+                if predicate(expr):
+                    result.append(expr)
+                result = [*result, *expr.filter(predicate)]
+        return result
 
 @dataclass
 class Is(LogicalOperationExpression):
@@ -156,35 +182,51 @@ class Is(LogicalOperationExpression):
     
 class Not(SelectableExpression):
 
-    def __init__(self, expr: Expression):
+    def __init__(self, expr: SelectableExpression):
         self.expr = expr
 
     def tokens(self) -> List[str]:
         return ['NOT', *self.expr.tokens()]
+    
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        if predicate(self.expr):
+            result.append(self.expr)
+        result = [*result, *self.expr.filter(predicate)]
+        return result
 
 
 class IsNull(Is):
 
-    def __init__(self, expr: Expression):
-        super().__init__(left=expr, right=NullExpression())
+    def __init__(self, left: SelectableExpression):
+        super().__init__(left=left, right=NullExpression())
+
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        if predicate(self.left):
+            result.append(self.left)
+        result = [*result, *self.left.filter(predicate)]
+        return result
     
 
 class IsNotNull(Is):
 
-    def __init__(self, expr: Expression):
-        super().__init__(left=expr, right=Not(NullExpression()))
+    def __init__(self, left: SelectableExpression):
+        super().__init__(left=left, right=Not(NullExpression()))
+
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        if predicate(self.left):
+            result.append(self.left)
+        result = [*result, *self.left.filter(predicate)]
+        return result
     
 
-class Between(LogicalOperationExpression):
-
-
-    def __init__(self, left: Expression, from_: Expression, to: Expression):
-        assert isinstance(left, Expression)
-        assert isinstance(from_, Expression)
-        assert isinstance(to, Expression)
-        self.left = left
-        self.from_ = from_
-        self.to = to
+@dataclass
+class Between(SelectableExpression):
+    left: SelectableExpression
+    from_ : SelectableExpression
+    to: SelectableExpression
 
     @property
     def op_str(self) -> str:
@@ -192,6 +234,14 @@ class Between(LogicalOperationExpression):
     
     def tokens(self) -> List[str]:
         return [*self.left.tokens(), self.op_str, *self.from_.tokens(), 'AND', *self.to.tokens()]
+    
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        for expr in [self.left, self.right, self.to]:
+            if predicate(expr):
+                result.append(expr)
+            result = [*result, *expr.filter(predicate)]
+        return result
     
 class And(LogicalOperationExpression):
 
@@ -247,8 +297,6 @@ class LikeSome(Like):
         return f"{super().op_str} SOME"
     
 
-    
-
 class Plus(MathOperationExpression):
 
     @property
@@ -289,9 +337,9 @@ class PositionKeyword:
 
 
 class IndexOperatorExpression(SelectableExpression):
-    """usd to denote access to columns, structs"""
+    """used to denote access to columns, structs"""
 
-    def __init__(self, expr: Expression, index: int | str | PositionKeyword):
+    def __init__(self, expr: SelectableExpression, index: int | str | PositionKeyword):
         self.expr = expr
         if isinstance(index, int):
             if index < 0:
@@ -320,6 +368,13 @@ class IndexOperatorExpression(SelectableExpression):
             return [*init, f"{last}.{self.resolve_index_token()}"]
         else:
             return [*init, f"{last}[", self.resolve_index_token(), ']']
+        
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        if predicate(self.expr):
+            result.append(self.expr)
+        result = [*result, *self.expr.filter(predicate)]
+        return result
 
 @dataclass        
 class UnNestOperatorExpression(SelectableExpression, JoinableExpression):
@@ -334,4 +389,10 @@ class UnNestOperatorExpression(SelectableExpression, JoinableExpression):
     
     def __hash__(self):
         return hash(''.join(self.tokens()))
-        
+    
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        if predicate(self.expr):
+            result.append(self.expr)
+        result = [*result, *self.expr.filter(predicate)]
+        return result

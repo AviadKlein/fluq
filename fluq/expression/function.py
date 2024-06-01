@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Dict
+from typing import Callable, List, Optional, Tuple
 from abc import abstractmethod
 
 from fluq.expression.base import *
+from fluq.expression.base import Expression
 from fluq.expression.literals import OrderBySpecExpression
 from fluq.expression.operator import *
 
 
 @dataclass
-class WindowFrameExpression(Expression):
+class WindowFrameExpression(TerminalExpression):
     """Window frames
     
     Source:
@@ -133,7 +134,23 @@ class WindowSpecExpression(Expression):
                     case WindowFrameExpression(_):
                         result = [*result, *spec.tokens()]
         return result
-
+    
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        exprs = []
+        if self.partition_by is not None:
+            exprs = [*exprs, *self.partition_by]
+        if self.order_by is not None:
+            exprs = [*exprs, *self.order_by]
+        if self.window_frame_clause is not None:
+            exprs = [*exprs, self.window_frame_clause]
+        
+        for expr in exprs:
+            if predicate(expr):
+                result.append(expr)
+            result = [*result, *expr.filter(predicate)]
+        return result
+    
 
 @dataclass
 class AnalyticFunctionExpression(SelectableExpression):
@@ -150,6 +167,16 @@ class AnalyticFunctionExpression(SelectableExpression):
             head += token
         _str = self.__class__.__name__ + head
         return hash(_str)
+    
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        if predicate(self.expr):
+            result.append(self.expr)
+        result = [*result, *self.expr.filter(predicate)]
+        if predicate(self.window_spec_expr):
+            result.append(self.window_spec_expr)
+        result = [*result, *self.window_spec_expr.filter(predicate)]
+        return result
     
     # Functions
 class AbstractFunctionExpression(SelectableExpression):
@@ -178,22 +205,22 @@ class AbstractFunctionExpression(SelectableExpression):
     def is_distinct(self) -> bool:
         pass
 
-    def __init__(self, *args: SelectableExpression):
-        self.args = []
-        args = list(args)
-        n = len(args)
+    def __init__(self, *exprs: SelectableExpression):
+        self.exprs = []
+        exprs = list(exprs)
+        n = len(exprs)
         if not self.is_legit_number_of_args(n):
             raise SyntaxError(f"function {self.symbol} expects a signature with {self.arg_num()} arguments (see __doc__ for FunctionParams), got {n}")
-        for arg in list(args):
+        for arg in list(exprs):
             if not isinstance(arg, SelectableExpression):
                 raise TypeError(f"functions expect SelectableExpression, got: {type(arg)}")
             else:
-                self.args.append(arg)
+                self.exprs.append(arg)
     
     def tokens(self) -> List[str]:
         result = []
-        for arg in self.args:
-            tkns = arg.tokens()
+        for expr in self.exprs:
+            tkns = expr.tokens()
             if len(result) == 0:
                 result = tkns
             else:
@@ -202,6 +229,14 @@ class AbstractFunctionExpression(SelectableExpression):
             return [f"{self.symbol()}(","DISTINCT", *result, ")"]
         else:
             return [f"{self.symbol()}(", *result, ")"]
+        
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        for expr in self.exprs:
+            if predicate(expr):
+                result.append(expr)
+            result = [*result, *expr.filter(predicate)]
+        return result
     
 class AbstractAggregateFunctionExpression(AbstractFunctionExpression):
     """a sub class to indicate agg funcs"""
@@ -299,7 +334,7 @@ class FunctionParams:
 
                     
 
-class SQLFunctionExpressions:
+class SQLFunctionsGenerator:
 
     @classmethod
     def _params(cls) -> List[FunctionParams]:
@@ -569,32 +604,34 @@ class SQLFunctionExpressions:
             if param.supports_distinct:
                 setattr(self, param.clazz_name(True), param.to_expression(True))
                 
-    
+@dataclass
 class CaseExpression(SelectableExpression):
+    cases: List[Tuple[SelectableExpression, SelectableExpression]]
+    otherwise: Optional[SelectableExpression]=None
 
-    @classmethod
-    def _resolve_condition(cls, condition: Expression) -> LogicalOperationExpression:
-        if isinstance(condition, LogicalOperationExpression):
-            return condition
-        else:
-            return condition.to_logical()
+    def __post_init__(self):
+        for cond, value in self.cases:
+            if not isinstance(cond, SelectableExpression) or not isinstance(value, SelectableExpression):
+                raise TypeError()
+        if self.otherwise is not None:
+            if not isinstance(self.otherwise, SelectableExpression):
+                if isinstance(self.otherwise, int | float | str | bool):
+                    self.otherwise = LiteralExpression(self.otherwise)
+                else:
+                    raise TypeError(f"unsupported type for otherwise, got {type(self.otherwise)=}")
 
-    def __init__(self, cases: List[Tuple[Expression, Expression]], otherwise: Optional[Expression]=None):
-        self.cases = [(self._resolve_condition(condition), value) for condition, value in cases]
-        self.otherwise = otherwise
-
-    def add(self, condition: Expression, value: Expression) -> CaseExpression:
-        new_cases = [*self.cases, (self._resolve_condition(condition), value)]
+    def add(self, condition: SelectableExpression, value: SelectableExpression) -> CaseExpression:
+        new_cases = [*self.cases, (condition, value)]
         return CaseExpression(new_cases, self.otherwise)
 
-    def add_otherwise(self, otherwise: Expression) -> CaseExpression:
+    def add_otherwise(self, otherwise: SelectableExpression) -> CaseExpression:
         return CaseExpression(self.cases, otherwise)
 
     @classmethod
-    def _case_to_sql(cls, operation: Expression, expr: Expression) -> List[str]:
+    def _case_to_sql(cls, operation: SelectableExpression, expr: SelectableExpression) -> List[str]:
         return ['WHEN', *operation.tokens(), 'THEN', *expr.tokens()]
     
-    def cases_unindented_sql(self) -> List[str]:
+    def case_tokens(self) -> List[str]:
         cases = []
         for operation, expr in self.cases:
             cases += self._case_to_sql(operation, expr)
@@ -604,7 +641,22 @@ class CaseExpression(SelectableExpression):
     def tokens(self) -> List[str]:
         if len(self.cases) == 0:
             raise ValueError("can't render to sql with 0 cases")
-        return ['CASE', *self.cases_unindented_sql(), 'END']
+        return ['CASE', *self.case_tokens(), 'END']
+    
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        for cond, value in self.cases:
+            if predicate(cond):
+                result.append(cond)
+            result = [*result, *cond.filter(predicate)]
+            if predicate(value):
+                result.append(value)
+            result = [*result, *value.filter(predicate)]
+        if self.otherwise is not None:
+            if predicate(self.otherwise):
+                result.append(self.otherwise)
+            result = [*result, *self.otherwise.filter(predicate)]
+        return result
     
 
 class ExistsOperatorExpression(SelectableExpression):
@@ -616,4 +668,11 @@ class ExistsOperatorExpression(SelectableExpression):
 
     def tokens(self) -> List[str]:
         return ['EXISTS', '(', *self.query.tokens(), ')']
+    
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        if predicate(self.query):
+            result.append(self.query)
+        result = [*result, *self.query.filter(predicate)]
+        return result
 
