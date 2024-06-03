@@ -3,6 +3,8 @@ from unittest import TestCase
 from fluq.expression.base import *
 from fluq.expression.function import *
 from fluq.expression.selectable import ColumnExpression, LiteralExpression
+from fluq.sql import col
+from fluq.sql import functions as fn
 
 class TestFunction(TestCase):
 
@@ -55,12 +57,12 @@ class TestFunction(TestCase):
 
     def test_all_functions_are_rendered(self):
         expected_classes = []
-        for params in SQLFunctionExpressions._params():
+        for params in SQLFunctionsGenerator._params():
             expected_classes.append(params.clazz_name(False))
             if params.supports_distinct:
                 expected_classes.append(params.clazz_name(True))
         
-        actual_classes = [_ for _ in SQLFunctionExpressions().__dir__() if FunctionParams.clazz_prefix() in _]
+        actual_classes = [_ for _ in SQLFunctionsGenerator().__dir__() if FunctionParams.clazz_prefix() in _]
         self.assertEqual(len(actual_classes), len(expected_classes))
         self.assertEqual(len(set(actual_classes)), len(set(expected_classes)))
         
@@ -95,3 +97,7 @@ class TestFunction(TestCase):
         expected = ['CASE', 'WHEN', 'a', '=', '1', 'THEN', "'good'", 'WHEN', 'a', '=', '0', 'THEN', "'bad'", "ELSE", "'dunno'", 'END']
         
         self.assertListEqual(case.tokens(), expected)
+
+    def test_functions(self):
+        print(type(fn.sum(col("a"))))
+        print(type(fn.sum(col("income")).as_("sum_income")))

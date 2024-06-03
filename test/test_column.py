@@ -107,9 +107,10 @@ class TestColumn(TestCase):
         self.assertEqual((a % b).expr.sql, "MOD( a, b )")
         self.assertEqual(abs(a).expr.sql, "ABS( a )")
         self.assertEqual((a**3).expr.sql, "POWER( a, 3 )")
-
+    
 
     def test_case_expr(self):
+
         # case expressions
         case_ = when(col("a") > 5, 0).when(col("a") > 100, 1).otherwise(-1)
         expr: CaseExpression = case_.expr
@@ -119,7 +120,7 @@ class TestColumn(TestCase):
             'WHEN', 'a', '>', '100', 'THEN', '1',
             'ELSE', '-1'
         ]
-        result = expr.cases_unindented_sql()
+        result = expr.case_tokens()
         self.assertListEqual(expected, result)
 
     def test_functions(self):

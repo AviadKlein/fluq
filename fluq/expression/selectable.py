@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import List, Tuple
-from fluq.expression.base import Expression, SelectableExpression, ValidName
+from typing import List, Tuple, Callable
+from fluq.expression.base import Expression, SelectableExpression, ValidName, TerminalExpression
 
 
-class AnyExpression(SelectableExpression):
+class AnyExpression(SelectableExpression, TerminalExpression):
     """just in case you need to solve something"""
 
     def __init__(self, expr: str):
@@ -29,7 +29,7 @@ class AnyExpression(SelectableExpression):
         return [self.expr]
 
 
-class ColumnExpression(SelectableExpression):
+class ColumnExpression(SelectableExpression, TerminalExpression):
     """when you just want to point to a column"""
 
     def __init__(self, name: str):
@@ -49,7 +49,7 @@ class ColumnExpression(SelectableExpression):
 LiteralTypes = int | float | bool | str
 
 
-class LiteralExpression(SelectableExpression):
+class LiteralExpression(SelectableExpression, TerminalExpression):
     """to hold numbers, strings, booleans"""
 
     def __init__(self, value: LiteralTypes) -> None:
@@ -78,9 +78,12 @@ class NegatedExpression(SelectableExpression):
     def tokens(self) -> List[str]:
         head, *tail = self.expr.tokens()
         return [f'-{head}', *tail]
+    
+    def children(self) -> List[Expression]:
+        return [self.expr]
 
 
-class NullExpression(SelectableExpression):
+class NullExpression(SelectableExpression, TerminalExpression):
     """a special expression for the NULL value"""
 
     def tokens(self) -> List[str]:
@@ -89,7 +92,7 @@ class NullExpression(SelectableExpression):
 
 class ArrayExpression(SelectableExpression):
 
-    def __init__(self, *args: Expression):
+    def __init__(self, *args: SelectableExpression):
         self.elements = list(args)
 
     def tokens(self) -> List[str]:
@@ -100,9 +103,12 @@ class ArrayExpression(SelectableExpression):
             if elements_str[0] == ',':
                 elements_str = elements_str[1:]
         return ['[', *elements_str ,']']
+    
+    def children(self) -> List[Expression]:
+        return [self.elements]
 
 
-class JSONExpression(SelectableExpression):
+class JSONExpression(SelectableExpression, TerminalExpression):
 
     def __init__(self, json_str):
         self.json_str = json_str
@@ -115,23 +121,26 @@ class TupleExpression(SelectableExpression):
 
     def __init__(self, *args: LiteralTypes | ColumnExpression | LiteralExpression | TupleExpression) -> None:
         args = list(args)
-        self.args = []
+        self.elements = []
         for arg in args:
             if isinstance(arg, LiteralTypes):
-                self.args.append(LiteralExpression(arg))
+                self.elements.append(LiteralExpression(arg))
             elif isinstance(arg, ColumnExpression | LiteralExpression):
-                self.args.append(arg)
+                self.elements.append(arg)
             else:
                 raise TypeError(f"TupleExpression only supports: ColumnExpression and LiteralType, got {type(arg)}")
 
 
     def tokens(self) -> List[str]:
         result = []
-        for arg in self.args:
+        for arg in self.elements:
             result = [*result, ',', *arg.tokens()]
-        if len(self.args) > 1: # remove first comma
+        if len(self.elements) > 1: # remove first comma
             result = result[1:]
         return ['(', *result ,')']
+    
+    def children(self) -> List[Expression]:
+        return [self.elements]
 
 
 class StructExpression(SelectableExpression):
@@ -169,4 +178,7 @@ class StructExpression(SelectableExpression):
             else:
                 result = [*result, ',', *elem]
         return ['STRUCT(', *result, ')']
+
+    def children(self) -> List[Expression]:
+        return [self.exprs]
         

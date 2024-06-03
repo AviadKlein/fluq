@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, List
+from typing import Callable, Optional, List
 from collections import Counter
 from abc import abstractmethod
 
@@ -147,6 +147,9 @@ class JoinOperationExpression(Expression):
         right: List[str] = self.resolve_tokens("right")
         on_clause: List[str] = self.resolve_on_clause_tokens()
         return [*left, self.operator(), *right, *on_clause]
+    
+    def children(self) -> List[Expression]:
+        return [self.left, self.right]
 
 
 class InnerJoinOperationExpression(JoinOperationExpression):

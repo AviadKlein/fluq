@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from abc import abstractclassmethod
-from typing import Any, List, Dict, Tuple
-from fluq.expression.base import Expression, SelectableExpression
+from typing import Any, Callable, List, Dict, Tuple
+from fluq.expression.base import Expression, SelectableExpression, TerminalExpression
 
 class DataTypeExpression(Expression):
     """
@@ -58,13 +58,13 @@ class DataTypeWIthAliases(DataTypeExpression):
     def aliases(cls) -> List[str]:
         pass
 
-class BooleanDataType(DataTypeExpression):
+class BooleanDataType(DataTypeExpression, TerminalExpression):
 
     @classmethod
     def symbol(cls) -> str:
         return "BOOL"
     
-class BytesDataType(ParameterizedDataType):
+class BytesDataType(ParameterizedDataType, TerminalExpression):
 
     @classmethod
     def params_and_types(cls) -> Dict[str, Tuple[Any, Any]]:
@@ -77,7 +77,7 @@ class BytesDataType(ParameterizedDataType):
     def symbol(cls) -> str:
         return "BYTES"
     
-class StringDataType(ParameterizedDataType):
+class StringDataType(ParameterizedDataType, TerminalExpression):
 
     @classmethod
     def params_and_types(cls) -> Dict[str, Tuple[Any, Any]]:
@@ -87,37 +87,37 @@ class StringDataType(ParameterizedDataType):
     def symbol(cls) -> str:
         return "STRING"
 
-class DateDataType(DataTypeExpression):
+class DateDataType(DataTypeExpression, TerminalExpression):
 
     @classmethod
     def symbol(cls) -> str:
         return "DATE"
     
-class DateTimeDataType(DataTypeExpression):
+class DateTimeDataType(DataTypeExpression, TerminalExpression):
 
     @classmethod
     def symbol(cls) -> str:
         return "DATETIME"
     
-class GeographyDataType(DataTypeExpression):
+class GeographyDataType(DataTypeExpression, TerminalExpression):
 
     @classmethod
     def symbol(cls) -> str:
         return "GEOGRAPHY"
     
-class IntervalDataType(DataTypeExpression):
+class IntervalDataType(DataTypeExpression, TerminalExpression):
 
     @classmethod
     def symbol(cls) -> str:
         return "INTERVAL"
     
-class JSONDataType(DataTypeExpression):
+class JSONDataType(DataTypeExpression, TerminalExpression):
 
     @classmethod
     def symbol(cls) -> str:
         return "JSON"
     
-class INT64DataType(DataTypeWIthAliases):
+class INT64DataType(DataTypeWIthAliases, TerminalExpression):
 
     @classmethod
     def symbol(cls) -> str:
@@ -127,7 +127,7 @@ class INT64DataType(DataTypeWIthAliases):
     def aliases(cls) -> List[str]:
         return ['INT', 'SMALLINT', 'INTEGER', 'BIGINT', 'TINYINT', 'BYTEINT']
     
-class NUMERICDataType(DataTypeWIthAliases, ParameterizedDataType):
+class NUMERICDataType(DataTypeWIthAliases, ParameterizedDataType, TerminalExpression):
 
     @classmethod
     def params_and_types(cls) -> Dict[str, Tuple[Any, Any]]:
@@ -144,7 +144,7 @@ class NUMERICDataType(DataTypeWIthAliases, ParameterizedDataType):
     def __call__(self, precision: int, scale: int) -> NUMERICDataType:
         return NUMERICDataType(precision=precision, scale=scale)
 
-class BIGNUMERICDataType(DataTypeWIthAliases, ParameterizedDataType):
+class BIGNUMERICDataType(DataTypeWIthAliases, ParameterizedDataType, TerminalExpression):
 
     @classmethod
     def params_and_types(cls) -> Dict[str, Tuple[Any, Any]]:
@@ -161,19 +161,19 @@ class BIGNUMERICDataType(DataTypeWIthAliases, ParameterizedDataType):
     def __call__(self, precision: int, scale: int) -> BIGNUMERICDataType:
         return BIGNUMERICDataType(precision=precision, scale=scale)
 
-class FLOAT64DataType(DataTypeExpression):
+class FLOAT64DataType(DataTypeExpression, TerminalExpression):
 
     @classmethod
     def symbol(cls) -> str:
         return "FLOAT64"
     
-class TimeDataType(DataTypeExpression):
+class TimeDataType(DataTypeExpression, TerminalExpression):
 
     @classmethod
     def symbol(cls) -> str:
         return "TIME"
     
-class TimestampDataType(DataTypeExpression):
+class TimestampDataType(DataTypeExpression, TerminalExpression):
 
     @classmethod
     def symbol(cls) -> str:
@@ -189,6 +189,9 @@ class CastExpression(SelectableExpression):
 
     def tokens(self) -> List[str]:
         return ['CAST(', *self.base.tokens(), 'AS' ,*self.to.tokens(), ')']
+    
+    def children(self) -> List[Expression]:
+        return [self.base, self.to]
     
     
 

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import Callable, Optional, List
 
-from fluq.expression.base import QueryableExpression, JoinableExpression
+from fluq.expression.base import Expression, QueryableExpression
 from fluq.expression.clause import FromClauseExpression, WhereClauseExpression, \
     GroupByClauseExpression, SelectClauseExpression, HavingClauseExpression, QualifyClauseExpression, \
     OrderByClauseExpression, LimitClauseExpression, ClauseExpression
@@ -69,6 +69,27 @@ class QueryExpression(QueryableExpression):
                 result = [*result, *clause.tokens()]
         return result
     
+    def children(self) -> List[Expression]:
+        exprs = []
+        if self.select_clause is not None:
+            exprs.append(self.select_clause)
+        if self.from_clause is not None:
+            exprs.append(self.from_clause)
+        if self.where_clause is not None:
+            exprs.append(self.where_clause)
+        if self.group_by_clause is not None:
+            exprs.append(self.group_by_clause)
+        if self.having_clause is not None:
+            exprs.append(self.having_clause)
+        if self.qualify_clause is not None:
+            exprs.append(self.qualify_clause)
+        if self.limit_clause is not None:
+            exprs.append(self.limit_clause)
+        if self.order_by_clause is not None:
+            exprs.append(self.order_by_clause)
+        return exprs
+    
+    
     def is_simple(self) -> bool:
         """a simple query is the following pattern: SELECT * FROM [TABLE]"""
         cond = [self.select_clause.is_select_all(), 
@@ -81,10 +102,3 @@ class QueryExpression(QueryableExpression):
                 self.order_by_clause is None
                 ]
         return all(cond)
-    
-
-
-
-    
-
-    

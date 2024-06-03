@@ -11,7 +11,7 @@ from fluq.column import Column
 from fluq.render import Renderable
 
 
-def copy_doc(source, preamble: Optional[str]=None):
+def _copy_doc(source, preamble: Optional[str]=None):
     """decorator to copy __doc__ str between methods"""
     def decorator(target):
         target.__doc__ = source.__doc__
@@ -35,6 +35,21 @@ class Frame(ResultSet):
         self._alias = None
         if alias is not None:
             self._alias = ValidName(alias)
+        # if the user did not supply an alias, we try to infer it from the query
+        else:
+            match self._query_expr:
+                case QueryExpression(_) if self._query_expr.from_clause is None:
+                    pass
+                case QueryExpression(_):
+                    match self._query_expr.from_clause.from_item, self._query_expr.from_clause.alias:
+                        case TableNameExpression(db_path), None:
+                            self._alias = ValidName(db_path.last_identifer())
+                        case TableNameExpression(_), str(name):
+                            self._alias = ValidName(name)
+                        case _:
+                            pass
+                case _:
+                    pass
 
     def as_(self, alias: str) -> Frame:
         assert isinstance(alias, str)
@@ -161,7 +176,7 @@ class Frame(ResultSet):
         else:
             return False
 
-    @copy_doc(where, preamble="An alias for 'where'")
+    @_copy_doc(where, preamble="An alias for 'where'")
     def filter(self, predicate: Column) -> Frame:
         return self.where(predicate=predicate)
     
@@ -299,7 +314,7 @@ class Frame(ResultSet):
         query = QueryExpression(from_clause=from_clause, select_clause=select_clause)
         return Frame(queryable_expression=query)
     
-    @copy_doc(cartesian, preamble="An alias for 'cartesian'")
+    @_copy_doc(cartesian, preamble="An alias for 'cartesian'")
     def cross_join(self, other: Frame) -> Frame:
         return self.cartesian(other)
 
@@ -411,11 +426,14 @@ class Frame(ResultSet):
             case _:
                 raise TypeError(f"unsupported Querayble, got {type(self._query_expr)}")
         
-
     @property
     def sql(self) -> Renderable:
         return self._query_expr.sql
-    
+
+    def source_table_names(self) -> List[str]:
+        exprs = self._get_expr().filter(predicate=lambda e: isinstance(e, TableNameExpression))
+        return list(map(lambda e: e.db_path.name, exprs))
+
 class GroupByFrame:
 
     def __init__(self, query: QueryExpression, alias: Optional[str], grouping_items: List[Column]):
@@ -446,8 +464,7 @@ class GroupByFrame:
         select_expr = [_.expr for _ in cols]
         select_aliases = [_.alias for _ in cols]
         return list(zip(self.group_by_expr, self.group_by_aliases)) + list(zip(select_expr, select_aliases))
-
-    
+   
     def agg(self, *cols: Column) -> Frame:
         zipped = self._resolve_expressions_and_aliases(*cols)
         

@@ -122,5 +122,3 @@ class TestSql(TestCase):
 
         print(query.sql)
 
-
-    

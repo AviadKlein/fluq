@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from abc import abstractclassmethod
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Callable, List, Optional
 
-from fluq.expression.base import QueryableExpression
+from fluq.expression.base import Expression, QueryableExpression
 from fluq.expression.query import QueryExpression
 
 # set operations    
@@ -49,6 +49,10 @@ class SetOperation(QueryableExpression):
                 result = [*result, obj.symbol(), '(']
         result += [')']*parenthesis_cnt
         return result
+    
+    def children(self) -> List[Expression]:
+        return [self.left, self.right]
+
         
 @dataclass
 class UnionAllSetOperation(SetOperation):

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from fluq.expression.base import *
+from fluq.expression.base import Expression
 from fluq.expression.join import *
 from fluq.expression.literals import OrderBySpecExpression
 from fluq.expression.operator import LogicalOperationExpression, And, Or, UnNestOperatorExpression
@@ -120,7 +121,10 @@ class SelectClauseExpression(ClauseExpression):
             exprs = exprs[1:]
         header = ['SELECT'] if not self._distinct else ['SELECT', 'DISTINCT']
         return [*header, *exprs]
-
+    
+    def children(self) -> List[Expression]:
+        return self.expressions
+                
     
 class FromClauseExpression(ClauseExpression):
     """an Expression to hold the From clause
@@ -276,23 +280,26 @@ class FromClauseExpression(ClauseExpression):
         if self.alias is not None:
             from_item_tkns = [*from_item_tkns, 'AS', self.alias]
         return ['FROM', *from_item_tkns]
+    
+    def children(self) -> List[Expression]:
+        return [self.from_item]
 
 
 class PredicateClauseExpression(ClauseExpression):
     """an abstract class to suport WHERE, HAVING and QUALIFY clauses"""
 
-    def __init__(self, predicate: LogicalOperationExpression):
-        assert isinstance(predicate, LogicalOperationExpression)
-        self.predicate = predicate
+    def __init__(self, logical_operation: LogicalOperationExpression):
+        assert isinstance(logical_operation, LogicalOperationExpression)
+        self.logical_operation = logical_operation
 
     def and_(self, predicate: LogicalOperationExpression):
         assert isinstance(predicate, LogicalOperationExpression)
-        new_predicate = And(left=self.predicate, right=predicate)
+        new_predicate = And(left=self.logical_operation, right=predicate)
         return self.__class__(new_predicate)
     
     def or_(self, predicate: LogicalOperationExpression):
         assert isinstance(predicate, LogicalOperationExpression)
-        new_predicate = Or(left=self.predicate, right=predicate)
+        new_predicate = Or(left=self.logical_operation, right=predicate)
         return self.__class__(new_predicate)
     
     @abstractmethod
@@ -300,7 +307,10 @@ class PredicateClauseExpression(ClauseExpression):
         pass
     
     def tokens(self) -> List[str]:
-        return [self.clause_symbol(), *self.predicate.tokens()]
+        return [self.clause_symbol(), *self.logical_operation.tokens()]
+
+    def children(self) -> List[Expression]:
+        return [self.logical_operation]
     
     
 
@@ -344,6 +354,9 @@ class GroupByClauseExpression(ClauseExpression):
             for tokens in [_.tokens() for _ in self._expressions[1:]]:
                 gi_tkns = [*gi_tkns, ',' ,*tokens]
         return ['GROUP BY', *gi_tkns]
+    
+    def children(self) -> List[Expression]:
+        return self._expressions
 
 class OrderByClauseExpression(ClauseExpression):
 
@@ -384,9 +397,12 @@ class OrderByClauseExpression(ClauseExpression):
             result = [*result, ',', *expr.tokens(), *obs.tokens()]
       
         return ['ORDER BY', *result]
+    
+    def children(self) -> List[Expression]:
+        return self._expressions
 
 
-class LimitClauseExpression(ClauseExpression):
+class LimitClauseExpression(ClauseExpression, TerminalExpression):
 
     def __init__(self, limit: int, offset: Optional[int]=None):
         assert limit > 0 and isinstance(limit, int)

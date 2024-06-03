@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fluq.render import Renderable
 
-from typing import List, Tuple
+from typing import List, Tuple, Callable
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import string
@@ -52,6 +52,9 @@ class ValidName:
                     raise TypeError(f"illegal name, due to bad characters in these locations: {bad_chars}")
         self.name = self.remove_redundant_dots(self.name)
 
+    def last_identifer(self) -> str:
+        return self.name.split('.')[-1]
+
 
 # Expressions
 class Expression(ABC):
@@ -76,6 +79,26 @@ class Expression(ABC):
     def tokens(self) -> List[str]:
         pass
 
+    @abstractmethod
+    def children(self) -> List[Expression]:
+        pass
+    
+    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        result = []
+        for expr in self.children():
+            if predicate(expr):
+                result.append(expr)
+            result = [*result, *expr.filter(predicate)]
+        return result
+
+
+
+class TerminalExpression(Expression):
+
+    def children(self) -> List[Expression]:
+        return []
+
+
 class SelectableExpression(Expression):
     """a base class for everything one can put in SELECT, WHERE, GROUP BY .... clauses"""
     pass 
@@ -88,16 +111,18 @@ class QueryableExpression(JoinableExpression):
     """abstract flag for queries of all types"""
     pass
 
-class TableNameExpression(JoinableExpression):
+@dataclass
+class TableNameExpression(JoinableExpression, TerminalExpression):
+    db_path: ValidName | str
 
-    def __init__(self, db_path: ValidName | str):
-        assert isinstance(db_path, ValidName | str), f"only supported ValidName | str, got {type(db_path)=}"
-        if isinstance(db_path, str):
-            db_path = ValidName(db_path)
-        self.db_path = db_path
+    def __post_init__(self):
+        assert isinstance(self.db_path, ValidName | str), f"only supported ValidName | str, got {type(db_path)=}"
+        if isinstance(self.db_path, str):
+            self.db_path = ValidName(self.db_path)
 
     def tokens(self) -> List[str]:
         return [self.db_path.name]
+
     
 class ResultSet(ABC):
     """a basic class to serve Frame and other Frame like classes - basically to help prevent circular imports"""

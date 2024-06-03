@@ -207,7 +207,7 @@ class Column:
                 to: str | int | float | bool | Column) -> Column:
         from_ = self._resolve_type(from_)
         to = self._resolve_type(to)
-        return Column(expression=Between(self.expr, from_.expr, to.expr), alias=None)
+        return Column(expression=Between(left=self.expr, from_=from_.expr, to=to.expr), alias=None)
     
     def __and__(self, other: str | int | float | bool | Column) -> Column:
         other = self._resolve_type(other)

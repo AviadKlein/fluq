@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from abc import abstractclassmethod
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Callable, List, Optional
 
-from fluq.expression.base import Expression, SelectableExpression
+from fluq.expression.base import Expression, TerminalExpression, SelectableExpression
 
 
-class DateTimePart(Expression):
+class DateTimePart(TerminalExpression):
     
     @abstractclassmethod
     def symbol(cls) -> str:
@@ -90,10 +90,15 @@ class IntervalLiteralExpression(SelectableExpression):
         if self.convert_to is not None:
             result = [*result, 'TO', *self.convert_to.tokens()]
         return result
-
+    
+    def children(self) -> List[Expression]:
+        result = [self.datetime_part]
+        if self.convert_to is not None:
+            result.append(self.convert_to)
+        return result
 
 @dataclass
-class OrderBySpecExpression(Expression):
+class OrderBySpecExpression(TerminalExpression):
     asc: bool=True
     nulls: str="FIRST"
 

@@ -5,3 +5,4 @@ dist/
 sparkit_aviad.klein.egg-info/
 fluq.egg-info/
 fluq_aviad.klein.egg-info/
+.venv
