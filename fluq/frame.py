@@ -35,6 +35,21 @@ class Frame(ResultSet):
         self._alias = None
         if alias is not None:
             self._alias = ValidName(alias)
+        # if the user did not supply an alias, we try to infer it from the query
+        else:
+            match self._query_expr:
+                case QueryExpression(_) if self._query_expr.from_clause is None:
+                    pass
+                case QueryExpression(_):
+                    match self._query_expr.from_clause.from_item, self._query_expr.from_clause.alias:
+                        case TableNameExpression(db_path), None:
+                            self._alias = ValidName(db_path.last_identifer())
+                        case TableNameExpression(_), str(name):
+                            self._alias = ValidName(name)
+                        case _:
+                            pass
+                case _:
+                    pass
 
     def as_(self, alias: str) -> Frame:
         assert isinstance(alias, str)

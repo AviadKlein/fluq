@@ -190,13 +190,8 @@ class CastExpression(SelectableExpression):
     def tokens(self) -> List[str]:
         return ['CAST(', *self.base.tokens(), 'AS' ,*self.to.tokens(), ')']
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        if predicate(self.base):
-            result.append(self.base)
-        if predicate(self.to):
-            result.append(self.to)
-        return [*result, *self.base.filter(predicate), *self.to.filter(predicate)]
+    def children(self) -> List[Expression]:
+        return [self.base, self.to]
     
     
 

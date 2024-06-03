@@ -122,14 +122,8 @@ class SelectClauseExpression(ClauseExpression):
         header = ['SELECT'] if not self._distinct else ['SELECT', 'DISTINCT']
         return [*header, *exprs]
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        for expr in self.expressions:
-            if predicate(expr):
-                result = [*result, expr, *expr.filter(predicate)]
-            else:
-                result = [*result, *expr.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return self.expressions
                 
     
 class FromClauseExpression(ClauseExpression):
@@ -287,12 +281,8 @@ class FromClauseExpression(ClauseExpression):
             from_item_tkns = [*from_item_tkns, 'AS', self.alias]
         return ['FROM', *from_item_tkns]
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        if predicate(self.from_item):
-            result.append(self.from_item)
-        rest = self.from_item.filter(predicate)
-        return [*result, *rest]
+    def children(self) -> List[Expression]:
+        return [self.from_item]
 
 
 class PredicateClauseExpression(ClauseExpression):
@@ -318,12 +308,9 @@ class PredicateClauseExpression(ClauseExpression):
     
     def tokens(self) -> List[str]:
         return [self.clause_symbol(), *self.logical_operation.tokens()]
-    
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        if predicate(self.logical_operation):
-            result.append(self.logical_operation)
-        return result + self.logical_operation.filter(predicate)
+
+    def children(self) -> List[Expression]:
+        return [self.logical_operation]
     
     
 
@@ -368,11 +355,8 @@ class GroupByClauseExpression(ClauseExpression):
                 gi_tkns = [*gi_tkns, ',' ,*tokens]
         return ['GROUP BY', *gi_tkns]
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        for expr in self._expressions:
-            result = [*result, *expr.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return self._expressions
 
 class OrderByClauseExpression(ClauseExpression):
 
@@ -414,11 +398,8 @@ class OrderByClauseExpression(ClauseExpression):
       
         return ['ORDER BY', *result]
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        for expr in self._expressions:
-            result = [*result, *expr.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return self._expressions
 
 
 class LimitClauseExpression(ClauseExpression, TerminalExpression):

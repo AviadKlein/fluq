@@ -50,14 +50,9 @@ class SetOperation(QueryableExpression):
         result += [')']*parenthesis_cnt
         return result
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        exprs = [self.left, self.right]
-        for expr in exprs:
-            if predicate(expr):
-                result.append(expr)
-            result = [*result, *expr.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return [self.left, self.right]
+
         
 @dataclass
 class UnionAllSetOperation(SetOperation):

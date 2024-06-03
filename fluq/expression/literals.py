@@ -91,15 +91,10 @@ class IntervalLiteralExpression(SelectableExpression):
             result = [*result, 'TO', *self.convert_to.tokens()]
         return result
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        if predicate(self.datetime_part):
-            result.append(self.datetime_part)
-        result = [*result, *self.datetime_part.filter(predicate)]
+    def children(self) -> List[Expression]:
+        result = [self.datetime_part]
         if self.convert_to is not None:
-            if predicate(self.convert_to):
-                result.append(self.convert_to)
-            result = [*result, *self.convert_to.filter(predicate)]
+            result.append(self.convert_to)
         return result
 
 @dataclass

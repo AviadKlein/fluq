@@ -52,15 +52,8 @@ class AbstractOperationExpression(SelectableExpression):
     def __hash__(self) -> int:
         return hash(self.__class__.__name__ + ''.join(self.tokens()))
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        if predicate(self.left):
-            result.append(self.left)
-        result = [*result, *self.left.filter(predicate)]
-        if predicate(self.right):
-            result.append(self.right)
-        result = [*result, *self.right.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return [self.left, self.right]
 
 
 class LogicalOperationExpression(AbstractOperationExpression):
@@ -157,21 +150,14 @@ class In(LogicalOperationExpression):
             resolved_tokens = [elem for pair in zipped for elem in pair] + [last_token]
             return [*self.left.tokens(), self.op_str, '(', *resolved_tokens, ')']
         
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        if predicate(self.left):
-            result.append(self.left)
-        result = [*result, *self.left.filter(predicate)]
+    def children(self) -> List[Expression]:
+        exprs = [self.left]
         if self.is_query:
-            if predicate(self.query):
-                result.append(self.query)
-            result = [*result, *self.query.filter(predicate)]
+            exprs.append(self.query)
         else:
-            for expr in self._list:
-                if predicate(expr):
-                    result.append(expr)
-                result = [*result, *expr.filter(predicate)]
-        return result
+            exprs = [*exprs, *self._list]
+        return exprs
+    
 
 @dataclass
 class Is(LogicalOperationExpression):
@@ -188,12 +174,8 @@ class Not(SelectableExpression):
     def tokens(self) -> List[str]:
         return ['NOT', *self.expr.tokens()]
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        if predicate(self.expr):
-            result.append(self.expr)
-        result = [*result, *self.expr.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return [self.expr]
 
 
 class IsNull(Is):
@@ -201,12 +183,9 @@ class IsNull(Is):
     def __init__(self, left: SelectableExpression):
         super().__init__(left=left, right=NullExpression())
 
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        if predicate(self.left):
-            result.append(self.left)
-        result = [*result, *self.left.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return [self.left]
+    
     
 
 class IsNotNull(Is):
@@ -214,12 +193,8 @@ class IsNotNull(Is):
     def __init__(self, left: SelectableExpression):
         super().__init__(left=left, right=Not(NullExpression()))
 
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        if predicate(self.left):
-            result.append(self.left)
-        result = [*result, *self.left.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return [self.left]
     
 
 @dataclass
@@ -235,13 +210,8 @@ class Between(SelectableExpression):
     def tokens(self) -> List[str]:
         return [*self.left.tokens(), self.op_str, *self.from_.tokens(), 'AND', *self.to.tokens()]
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        for expr in [self.left, self.right, self.to]:
-            if predicate(expr):
-                result.append(expr)
-            result = [*result, *expr.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return [self.left, self.from_, self.to]
     
 class And(LogicalOperationExpression):
 
@@ -369,12 +339,9 @@ class IndexOperatorExpression(SelectableExpression):
         else:
             return [*init, f"{last}[", self.resolve_index_token(), ']']
         
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        if predicate(self.expr):
-            result.append(self.expr)
-        result = [*result, *self.expr.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return [self.expr]
+    
 
 @dataclass        
 class UnNestOperatorExpression(SelectableExpression, JoinableExpression):
@@ -390,9 +357,5 @@ class UnNestOperatorExpression(SelectableExpression, JoinableExpression):
     def __hash__(self):
         return hash(''.join(self.tokens()))
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        if predicate(self.expr):
-            result.append(self.expr)
-        result = [*result, *self.expr.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return [self.expr]

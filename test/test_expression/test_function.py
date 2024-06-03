@@ -3,6 +3,8 @@ from unittest import TestCase
 from fluq.expression.base import *
 from fluq.expression.function import *
 from fluq.expression.selectable import ColumnExpression, LiteralExpression
+from fluq.sql import col
+from fluq.sql import functions as fn
 
 class TestFunction(TestCase):
 
@@ -95,3 +97,7 @@ class TestFunction(TestCase):
         expected = ['CASE', 'WHEN', 'a', '=', '1', 'THEN', "'good'", 'WHEN', 'a', '=', '0', 'THEN', "'bad'", "ELSE", "'dunno'", 'END']
         
         self.assertListEqual(case.tokens(), expected)
+
+    def test_functions(self):
+        print(type(fn.sum(col("a"))))
+        print(type(fn.sum(col("income")).as_("sum_income")))

@@ -22,7 +22,7 @@ class TestFrame(TestCase):
         frame = table("a")
         col: Column = frame("id")
         self.assertTrue(isinstance(col, Column))
-        self.assertEqual(col.expr.sql, "id")
+        self.assertEqual(col.expr.sql, "a.id")
 
         frame = table("a").as_("t1")
         col = frame("id")
@@ -35,8 +35,8 @@ class TestFrame(TestCase):
     def test_alias(self):
         frame = table("a")
         self.assertEqual(frame.sql, """SELECT * FROM a""")
-        # has no alias
-        self.assertIsNone(frame.alias)
+        # has automatic alias
+        self.assertEqual(frame.alias, "a")
 
         frame = frame.as_("t1")
 
@@ -71,10 +71,6 @@ class TestFrame(TestCase):
         expected = 'SELECT a, b, c FROM t1'
         result = frame.sql
         self.assertEqual(expected, result)
-
-        with self.assertRaises(AssertionError) as cm:
-            frame.select("a")
-        self.assertEqual("when sub selecting, first use an alias", str(cm.exception))
 
         frame = frame.as_("B").select("a")
         result = frame.sql
@@ -220,6 +216,11 @@ class TestFrame(TestCase):
         result = query.source_table_names()
         for t in ['t1', 't2', 't3']:
             self.assertTrue(t in result)
+
+    def test_frame_has_auto_alias_when_query_is_simple(self):
+        q = table("db.t1").where(col("a") == col("b")).select("*")
+        self.assertEqual(q.alias, "t1")
+        
         
         
 

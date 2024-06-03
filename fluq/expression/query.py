@@ -69,7 +69,7 @@ class QueryExpression(QueryableExpression):
                 result = [*result, *clause.tokens()]
         return result
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+    def children(self) -> List[Expression]:
         exprs = []
         if self.select_clause is not None:
             exprs.append(self.select_clause)
@@ -87,12 +87,8 @@ class QueryExpression(QueryableExpression):
             exprs.append(self.limit_clause)
         if self.order_by_clause is not None:
             exprs.append(self.order_by_clause)
-        result = []
-        for expr in exprs:
-            if predicate(expr):
-                result.append(expr)
-            result = [*result, *expr.filter(predicate)]
-        return result
+        return exprs
+    
     
     def is_simple(self) -> bool:
         """a simple query is the following pattern: SELECT * FROM [TABLE]"""

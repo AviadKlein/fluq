@@ -135,21 +135,15 @@ class WindowSpecExpression(Expression):
                         result = [*result, *spec.tokens()]
         return result
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
+    def children(self) -> List[Expression]:
         exprs = []
         if self.partition_by is not None:
-            exprs = [*exprs, *self.partition_by]
+            exprs.append(self.partition_by)
         if self.order_by is not None:
-            exprs = [*exprs, *self.order_by]
+            exprs.append(self.order_by)
         if self.window_frame_clause is not None:
-            exprs = [*exprs, self.window_frame_clause]
-        
-        for expr in exprs:
-            if predicate(expr):
-                result.append(expr)
-            result = [*result, *expr.filter(predicate)]
-        return result
+            exprs.append(self.window_frame_clause)
+        return [exprs]
     
 
 @dataclass
@@ -168,15 +162,9 @@ class AnalyticFunctionExpression(SelectableExpression):
         _str = self.__class__.__name__ + head
         return hash(_str)
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        if predicate(self.expr):
-            result.append(self.expr)
-        result = [*result, *self.expr.filter(predicate)]
-        if predicate(self.window_spec_expr):
-            result.append(self.window_spec_expr)
-        result = [*result, *self.window_spec_expr.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return [self.expr, self.window_spec_expr]
+    
     
     # Functions
 class AbstractFunctionExpression(SelectableExpression):
@@ -230,14 +218,10 @@ class AbstractFunctionExpression(SelectableExpression):
         else:
             return [f"{self.symbol()}(", *result, ")"]
         
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        for expr in self.exprs:
-            if predicate(expr):
-                result.append(expr)
-            result = [*result, *expr.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return self.exprs
     
+
 class AbstractAggregateFunctionExpression(AbstractFunctionExpression):
     """a sub class to indicate agg funcs"""
     
@@ -643,20 +627,14 @@ class CaseExpression(SelectableExpression):
             raise ValueError("can't render to sql with 0 cases")
         return ['CASE', *self.case_tokens(), 'END']
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
+    def children(self) -> List[Expression]:
+        exprs = []
         for cond, value in self.cases:
-            if predicate(cond):
-                result.append(cond)
-            result = [*result, *cond.filter(predicate)]
-            if predicate(value):
-                result.append(value)
-            result = [*result, *value.filter(predicate)]
+            exprs.append(cond)
+            exprs.append(value)
         if self.otherwise is not None:
-            if predicate(self.otherwise):
-                result.append(self.otherwise)
-            result = [*result, *self.otherwise.filter(predicate)]
-        return result
+            exprs.append(self.otherwise)
+        return exprs
     
 
 class ExistsOperatorExpression(SelectableExpression):
@@ -669,10 +647,6 @@ class ExistsOperatorExpression(SelectableExpression):
     def tokens(self) -> List[str]:
         return ['EXISTS', '(', *self.query.tokens(), ')']
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        if predicate(self.query):
-            result.append(self.query)
-        result = [*result, *self.query.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return [self.query]
 

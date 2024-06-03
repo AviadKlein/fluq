@@ -1,5 +1,3 @@
-from typing import Any, List
-
 from fluq._util import is_valid_json
 from fluq.expression.base import *
 from fluq.expression.function import *

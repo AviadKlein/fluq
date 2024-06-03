@@ -79,12 +79,8 @@ class NegatedExpression(SelectableExpression):
         head, *tail = self.expr.tokens()
         return [f'-{head}', *tail]
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        if predicate(self.expr):
-            result.append(self.expr)
-        result = [*result, *self.expr.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return [self.expr]
 
 
 class NullExpression(SelectableExpression, TerminalExpression):
@@ -108,13 +104,8 @@ class ArrayExpression(SelectableExpression):
                 elements_str = elements_str[1:]
         return ['[', *elements_str ,']']
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        for expr in self.elements:
-            if predicate(expr):
-                result.append(expr)
-            result = [*result, *expr.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return [self.elements]
 
 
 class JSONExpression(SelectableExpression, TerminalExpression):
@@ -148,13 +139,8 @@ class TupleExpression(SelectableExpression):
             result = result[1:]
         return ['(', *result ,')']
     
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        for expr in self.elements:
-            if predicate(expr):
-                result.append(expr)
-            result = [*result, *expr.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return [self.elements]
 
 
 class StructExpression(SelectableExpression):
@@ -193,11 +179,6 @@ class StructExpression(SelectableExpression):
                 result = [*result, ',', *elem]
         return ['STRUCT(', *result, ')']
 
-    def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
-        result = []
-        for expr in self.exprs:
-            if predicate(expr):
-                result.append(expr)
-            result = [*result, *expr.filter(predicate)]
-        return result
+    def children(self) -> List[Expression]:
+        return [self.exprs]
         
