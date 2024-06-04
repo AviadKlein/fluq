@@ -1,8 +1,10 @@
 from unittest import TestCase
 
-from fluq.parse import *
+from fluq.parse.parse import *
+from fluq.expression.clause import SelectClauseExpression
+from fluq.expression.selectable import LiteralExpression
 
-class TestParsing(TestCase):
+class TestParsingBase(TestCase):
 
     def test_text_range_init(self):
         tr = TextRange(0, 1)
@@ -136,7 +138,8 @@ class TestParsing(TestCase):
             """'''Title:"Boy"'''""",
             '''Title:"Boy"''',
             'Title: "Boy"',
-            """select * from gg where index='' and date >= '2023-01-01' """
+            """select * from gg where index='' and date >= '2023-01-01' """,
+            "   `ggg`"
         ]
         e = [
             (8, '"""'),
@@ -146,6 +149,7 @@ class TestParsing(TestCase):
             (6, '"'),
             (7, '"'),
             (29,"'"),
+            (3, "`")
         ]
         for s_i, e_i in zip(s,e):
             try:
@@ -163,6 +167,7 @@ class TestParsing(TestCase):
             '''Title:"Boy"''',
             'Title: "Boy"',
             """select * from gg where index='' and date >= '2023-01-01' """,
+            "  `ggg`"
         ]
         inputs = [
             (8, '"""'),
@@ -171,10 +176,13 @@ class TestParsing(TestCase):
             (0, "'''"),
             (6, '"'),
             (7, '"'),
-            (29,"'")
+            (29,"'"),
+            (2, "`")
         ]
-        expected = [7, 2, 10, 11, 3, 3, 0]
-        for s_i, (offset, left_quote), exp in zip(strs,inputs, expected):
+        expected = [7, 2, 10, 11, 3, 3, 0, 3]
+        assert len(expected) == len(inputs)
+        assert len(strs) == len(inputs)
+        for s_i, (offset, left_quote), exp in zip(strs, inputs, expected):
             try:
                 result = find_enclosing_quote(s_i, left_quote, offset)
                 self.assertEqual(result, exp)
@@ -217,6 +225,8 @@ class TestParsing(TestCase):
 
         s = """number '1', number '''2''', number r'''3'''"""
         result = parse_literals(s)
+        for t in result:
+            print(f"\n{t}")
         self.assertEqual(len(result), 3)
         self.assertEqual(result[2][1].quotes, ("'''", "'''"))
 
@@ -313,6 +323,9 @@ class TestParsing(TestCase):
     def test_parse_parenthesis_1(self):
         s = "start (here)"
         result = parse_parenthesis(s)
+
+        for e in result:
+            print(e)
         
         self.assertEqual(result[0][0], 0)
         self.assertEqual(result[0][1], TextRange(6, 11))
@@ -323,6 +336,9 @@ class TestParsing(TestCase):
     def test_parse_parenthesis_2(self):
         s = "start (here) and end (there)"
         result = parse_parenthesis(s)
+
+        for e in result:
+            print(e)
         
         self.assertEqual(len(result), 2)
 
@@ -374,3 +390,13 @@ class TestParsing(TestCase):
         self.assertEqual(result[4][0], 2)
         self.assertEqual(result[4][1], TextRange(36,43))
 
+class TestParseQueries(TestCase):
+    
+    def test_simple_select_no_from(self):
+        s = """select 1,2,3"""
+        expected = SelectClauseExpression(
+            expressions=[LiteralExpression(1), LiteralExpression(2), LiteralExpression(3)],
+            aliases=[None, None, None]
+            )
+        self.fail("wip")
+        

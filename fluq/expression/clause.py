@@ -122,7 +122,7 @@ class SelectClauseExpression(ClauseExpression):
         header = ['SELECT'] if not self._distinct else ['SELECT', 'DISTINCT']
         return [*header, *exprs]
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return self.expressions
                 
     
@@ -281,7 +281,7 @@ class FromClauseExpression(ClauseExpression):
             from_item_tkns = [*from_item_tkns, 'AS', self.alias]
         return ['FROM', *from_item_tkns]
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.from_item]
 
 
@@ -309,7 +309,7 @@ class PredicateClauseExpression(ClauseExpression):
     def tokens(self) -> List[str]:
         return [self.clause_symbol(), *self.logical_operation.tokens()]
 
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.logical_operation]
     
     
@@ -355,7 +355,7 @@ class GroupByClauseExpression(ClauseExpression):
                 gi_tkns = [*gi_tkns, ',' ,*tokens]
         return ['GROUP BY', *gi_tkns]
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return self._expressions
 
 class OrderByClauseExpression(ClauseExpression):
@@ -398,7 +398,7 @@ class OrderByClauseExpression(ClauseExpression):
       
         return ['ORDER BY', *result]
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return self._expressions
 
 

@@ -13,7 +13,20 @@ import re
 # Naming of objects
 @dataclass
 class ValidName:
-    """asserts that a name str is a proper valid name for columns"""
+    """asserts that a name str is a proper valid name for columns/tables/aliases
+    
+    Usage:
+        >>> valid_name: ValidName = ValidName('foo')
+        >>> print(valid_name.name) # Output: foo
+
+        >>> ValidName('23my_col') # Raises: TypeError
+
+        can also be used with `backticks`:
+        >>> print(ValidName('`foo bar`').name) # Output: `foo bar`
+    
+    Raises:
+        TypeError for invalide names
+    """
     name: str
     
     @property
@@ -58,11 +71,26 @@ class ValidName:
 
 # Expressions
 class Expression(ABC):
-    """This is the basic workhorse
-    expressions 'sql' themselves and can hold other expressions"""
+    """This is the basic workhorse to hold a query and understand it
+    
+    Methods:
+
+        sql (property) - the Renderable object that holds the SQL str
+
+        __hash__ - for storing in dicts, sets and for comparing to other expressions
+        __eq__ - only between other expressions
+        
+        tokens (abstract) - each expression should be able to return tokens that mak up the SQL str 
+            the expression is supposed to represent. it is up to the implementer to decide how to break it down
+        
+        sub_expressions (abstract) - a list of all sub-expressions (not recursive)
+        filter - a method to recursively go through all sub expressions and filter them by a predicate
+
+    """
 
     @property
     def sql(self) -> Renderable:
+        """The SQL str (Renedrable object that behaves like a str) of the expression"""
         return Renderable(tokens=self.tokens())
         
     def __hash__(self) -> int:
@@ -77,15 +105,27 @@ class Expression(ABC):
     
     @abstractmethod
     def tokens(self) -> List[str]:
+        """A list of all str tokens that make up the SQL str according to their display order"""
         pass
 
     @abstractmethod
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
+        """all 1 level subexpressions, not recursive."""
         pass
     
     def filter(self, predicate: Callable[[Expression], bool]) -> List[Expression]:
+        """return all sub-expressions (recursive) that meet a predicate
+        
+        Usage:
+            >>> from fluq.sql import *
+            >>> from fluq.frame import Frame
+            >>>
+            >>> query: Frame = select(col("a"), col("b"), col("c"))
+            >>> filtered = query._get_expr().filter(lambda e: e.tokens()[0] == "a")[0]_name.name
+            >>> print(filtered) # Output: a
+        """
         result = []
-        for expr in self.children():
+        for expr in self.sub_expressions():
             if predicate(expr):
                 result.append(expr)
             result = [*result, *expr.filter(predicate)]
@@ -94,8 +134,9 @@ class Expression(ABC):
 
 
 class TerminalExpression(Expression):
+    """an expression that has no sub_expressions"""
 
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return []
 
 
@@ -116,7 +157,7 @@ class TableNameExpression(JoinableExpression, TerminalExpression):
     db_path: ValidName | str
 
     def __post_init__(self):
-        assert isinstance(self.db_path, ValidName | str), f"only supported ValidName | str, got {type(db_path)=}"
+        assert isinstance(self.db_path, ValidName | str), f"only supported ValidName | str, got {type(self.db_path)=}"
         if isinstance(self.db_path, str):
             self.db_path = ValidName(self.db_path)
 

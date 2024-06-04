@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import List, Tuple, Callable
+from dataclasses import dataclass
+from typing import List, Tuple
 from fluq.expression.base import Expression, SelectableExpression, ValidName, TerminalExpression
 
 
@@ -29,14 +30,17 @@ class AnyExpression(SelectableExpression, TerminalExpression):
         return [self.expr]
 
 
+@dataclass
 class ColumnExpression(SelectableExpression, TerminalExpression):
     """when you just want to point to a column"""
+    _name: str
 
-    def __init__(self, name: str):
-        if name == "*":
-            self._name = "*"
+    def __post_init__(self):
+        assert isinstance(self._name, str)
+        if self._name == "*":
+            pass
         else:
-            self._name = ValidName(name)
+            self._name = ValidName(self._name)
 
     @property
     def name(self) -> str:
@@ -44,6 +48,9 @@ class ColumnExpression(SelectableExpression, TerminalExpression):
 
     def tokens(self) -> List[str]:
         return [self.name]
+    
+    def __hash__(self) -> int:
+        return hash(self.__class__.__name__ + self.name)
 
 
 LiteralTypes = int | float | bool | str
@@ -79,7 +86,7 @@ class NegatedExpression(SelectableExpression):
         head, *tail = self.expr.tokens()
         return [f'-{head}', *tail]
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.expr]
 
 
@@ -104,7 +111,7 @@ class ArrayExpression(SelectableExpression):
                 elements_str = elements_str[1:]
         return ['[', *elements_str ,']']
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.elements]
 
 
@@ -139,7 +146,7 @@ class TupleExpression(SelectableExpression):
             result = result[1:]
         return ['(', *result ,')']
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.elements]
 
 
@@ -179,6 +186,6 @@ class StructExpression(SelectableExpression):
                 result = [*result, ',', *elem]
         return ['STRUCT(', *result, ')']
 
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.exprs]
         

@@ -190,7 +190,7 @@ class CastExpression(SelectableExpression):
     def tokens(self) -> List[str]:
         return ['CAST(', *self.base.tokens(), 'AS' ,*self.to.tokens(), ')']
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.base, self.to]
     
     

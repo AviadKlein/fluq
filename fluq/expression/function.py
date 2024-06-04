@@ -135,7 +135,7 @@ class WindowSpecExpression(Expression):
                         result = [*result, *spec.tokens()]
         return result
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         exprs = []
         if self.partition_by is not None:
             exprs.append(self.partition_by)
@@ -162,7 +162,7 @@ class AnalyticFunctionExpression(SelectableExpression):
         _str = self.__class__.__name__ + head
         return hash(_str)
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.expr, self.window_spec_expr]
     
     
@@ -218,7 +218,7 @@ class AbstractFunctionExpression(SelectableExpression):
         else:
             return [f"{self.symbol()}(", *result, ")"]
         
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return self.exprs
     
 
@@ -627,7 +627,7 @@ class CaseExpression(SelectableExpression):
             raise ValueError("can't render to sql with 0 cases")
         return ['CASE', *self.case_tokens(), 'END']
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         exprs = []
         for cond, value in self.cases:
             exprs.append(cond)
@@ -647,6 +647,6 @@ class ExistsOperatorExpression(SelectableExpression):
     def tokens(self) -> List[str]:
         return ['EXISTS', '(', *self.query.tokens(), ')']
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.query]
 

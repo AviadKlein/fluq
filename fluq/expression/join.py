@@ -148,7 +148,7 @@ class JoinOperationExpression(Expression):
         on_clause: List[str] = self.resolve_on_clause_tokens()
         return [*left, self.operator(), *right, *on_clause]
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.left, self.right]
 
 

@@ -7,17 +7,10 @@ from dataclasses import dataclass
 import re
 
 
-@dataclass
-class Block:
-    pass
-
-@dataclass
-class Expression(Block):
-    pass
-
 
 @dataclass
 class TextRange:
+    """Text ranges hold a start and end ints"""
     start: int
     end: int
 
@@ -52,7 +45,8 @@ class TextRange:
         return self.__add__(by)
 
 @dataclass
-class StringLiteral(Expression):
+class StringLiteral:
+    """an object that holds a literl str and the type of quotes that it is quoted by"""
     quotes: Tuple[str, str]
     value: str
 
@@ -64,20 +58,6 @@ class StringLiteral(Expression):
         assert self.key in QUOTES_DICT.keys(), f"unsupported LHS quote {self.key}"
         assert QUOTES_DICT[self.key] == self.quotes[1]
     
-
-
-@dataclass
-class Query(Block):
-    CTE: Optional[List[Query]]
-    FROM: Expression
-    WHERE: Expression
-    GROUP_BY: Expression
-    SELECT: Expression
-    HAVING: Expression
-    QUALIFY: Expression
-    ORDER_BY: Expression
-    LIMIT: int
-    OFFSET: int
 
 class ParseError(Exception):
     
@@ -95,7 +75,8 @@ QUOTES_DICT = {
         'r"':'"',
         'r"""':'"""',
         "r'":"'",
-        "r'''":"'''"
+        "r'''":"'''",
+        "`":"`"
     }
 
 class Parsable:
@@ -179,7 +160,7 @@ def ensure_parsable(func: Callable) -> Callable:
 
 @ensure_parsable
 def index_to_row_and_column(s: Union[Parsable, str], index: int) -> Tuple[int, int]:
-    """given a str, will return the row/column representation of the index"""
+    """given a str, will return the row/column representation of index"""
     assert isinstance(index, int), f"`i` must be an int"
     assert index >= 0, f"`i` must geq 0, got {index=}"
     assert index <= len(s) - 1, f"`i` must be less or equal to the length of `s`, got {len(s)=}, {index=}"
@@ -360,4 +341,20 @@ def parse_parenthesis(s: Union[Parsable, str],
             result_cont = [(a,b.shift(right),c) for a,b,c in result_cont]
             result += result_cont
     return result
+
+
+
+@ensure_parsable
+def tokenize(s: str | Parsable) -> List[str]:
+    # get all literal locations
+    literals: List[Tuple[TextRange, StringLiteral]] = parse_literals(s)
+    # mask all literals
+    for tr, _ in literals:
+        s = s.mask(tr.start, tr.end)
+    par_s = parse_parenthesis(s)
+    return s, par_s
+    
+    
+
+    
 

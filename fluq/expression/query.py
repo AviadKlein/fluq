@@ -69,7 +69,7 @@ class QueryExpression(QueryableExpression):
                 result = [*result, *clause.tokens()]
         return result
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         exprs = []
         if self.select_clause is not None:
             exprs.append(self.select_clause)

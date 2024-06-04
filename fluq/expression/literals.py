@@ -91,7 +91,7 @@ class IntervalLiteralExpression(SelectableExpression):
             result = [*result, 'TO', *self.convert_to.tokens()]
         return result
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         result = [self.datetime_part]
         if self.convert_to is not None:
             result.append(self.convert_to)

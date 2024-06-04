@@ -50,7 +50,7 @@ class SetOperation(QueryableExpression):
         result += [')']*parenthesis_cnt
         return result
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.left, self.right]
 
         

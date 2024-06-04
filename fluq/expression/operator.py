@@ -52,7 +52,7 @@ class AbstractOperationExpression(SelectableExpression):
     def __hash__(self) -> int:
         return hash(self.__class__.__name__ + ''.join(self.tokens()))
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.left, self.right]
 
 
@@ -150,7 +150,7 @@ class In(LogicalOperationExpression):
             resolved_tokens = [elem for pair in zipped for elem in pair] + [last_token]
             return [*self.left.tokens(), self.op_str, '(', *resolved_tokens, ')']
         
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         exprs = [self.left]
         if self.is_query:
             exprs.append(self.query)
@@ -174,7 +174,7 @@ class Not(SelectableExpression):
     def tokens(self) -> List[str]:
         return ['NOT', *self.expr.tokens()]
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.expr]
 
 
@@ -183,7 +183,7 @@ class IsNull(Is):
     def __init__(self, left: SelectableExpression):
         super().__init__(left=left, right=NullExpression())
 
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.left]
     
     
@@ -193,7 +193,7 @@ class IsNotNull(Is):
     def __init__(self, left: SelectableExpression):
         super().__init__(left=left, right=Not(NullExpression()))
 
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.left]
     
 
@@ -210,7 +210,7 @@ class Between(SelectableExpression):
     def tokens(self) -> List[str]:
         return [*self.left.tokens(), self.op_str, *self.from_.tokens(), 'AND', *self.to.tokens()]
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.left, self.from_, self.to]
     
 class And(LogicalOperationExpression):
@@ -339,7 +339,7 @@ class IndexOperatorExpression(SelectableExpression):
         else:
             return [*init, f"{last}[", self.resolve_index_token(), ']']
         
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.expr]
     
 
@@ -357,5 +357,5 @@ class UnNestOperatorExpression(SelectableExpression, JoinableExpression):
     def __hash__(self):
         return hash(''.join(self.tokens()))
     
-    def children(self) -> List[Expression]:
+    def sub_expressions(self) -> List[Expression]:
         return [self.expr]
