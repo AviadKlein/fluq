@@ -325,6 +325,7 @@ class SQLFunctionsGenerator:
         
         return [
             
+            # agg
             FunctionParams("ANY_VALUE", 1, is_aggregate=True, supports_distinct=True),
             FunctionParams("AVG", 1, is_aggregate=True, supports_distinct=True),
             FunctionParams("COUNT", 1, is_aggregate=True, supports_distinct=True),
@@ -332,6 +333,11 @@ class SQLFunctionsGenerator:
             FunctionParams("MAX", 1, is_aggregate=True, supports_distinct=True),
             FunctionParams("MIN", 1, is_aggregate=True, supports_distinct=True),
             FunctionParams("SUM", 1, is_aggregate=True, supports_distinct=True),
+
+            # conditional
+            FunctionParams("IFNULL", 2),
+            FunctionParams("IF", 3),
+            FunctionParams("NULLIF", 2),
             
             # approx
             FunctionParams("APPROX_COUNT_DISTINCT", 1, is_aggregate=True),
