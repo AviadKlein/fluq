@@ -133,7 +133,7 @@ class Parsable:
         new_s.reverse()
         return Parsable(''.join(new_s))
     
-    def mask(self, start: int, end: int, mask: str='\U0001F60A') -> Parsable:
+    def mask(self, start: int, end: int, mask: str='\U0001F635') -> Parsable:
         assert isinstance(start, int)
         assert isinstance(end, int)
         assert start <= end
@@ -343,18 +343,23 @@ def parse_parenthesis(s: Union[Parsable, str],
     return result
 
 
-
 @ensure_parsable
-def tokenize(s: str | Parsable) -> List[str]:
-    # get all literal locations
-    literals: List[Tuple[TextRange, StringLiteral]] = parse_literals(s)
-    # mask all literals
-    for tr, _ in literals:
+def parse_single_level(s: Union[Parsable, str], parsed_parenthesis: List[Tuple[int, TextRange, Parsable]]):
+    level_0 = filter(lambda t: t[0] == 0, parsed_parenthesis)
+    level_0 = list(level_0)
+    for _, tr, _ in level_0:
         s = s.mask(tr.start, tr.end)
-    par_s = parse_parenthesis(s)
-    return s, par_s
-    
-    
+    head, *tail = re.split(r'(\s+|,|\(|\)|\[|\])', s.s)
+    match head.upper():
+        case 'SELECT':
+            pass
+        case 'WITH':
+            pass
+        case _:
+            pass
+
 
     
 
+    
+    

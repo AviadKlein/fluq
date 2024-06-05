@@ -71,7 +71,7 @@ class TestParsingBase(TestCase):
         p = Parsable('something to mask something to keep')
         result = p.mask(13,16)
         self.assertEqual(len(result), len(p))
-        self.assertEqual(result.s, "something to 😊😊😊😊 something to keep")        
+        self.assertEqual(result.s, "something to 😵😵😵😵 something to keep")        
 
     def test_ensure_parsable(self):
         @ensure_parsable
@@ -392,6 +392,11 @@ class TestParsingBase(TestCase):
 
 class TestParseQueries(TestCase):
     
+    def test_parse_single_level(self):
+        s = """select 1,2,3"""
+        result = parse_single_level(s, parsed_parenthesis=parse_parenthesis(s))
+        print(result)
+
     def test_simple_select_no_from(self):
         s = """select 1,2,3"""
         expected = SelectClauseExpression(
