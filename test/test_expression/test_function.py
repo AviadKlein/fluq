@@ -66,6 +66,10 @@ class TestFunction(TestCase):
         self.assertEqual(len(actual_classes), len(expected_classes))
         self.assertEqual(len(set(actual_classes)), len(set(expected_classes)))
         
+    def test_case_hash(self):
+        case = CaseExpression([])
+        hash(case)
+    
     def test_empty_case_expression(self):
         case = CaseExpression([])
 
@@ -97,6 +101,7 @@ class TestFunction(TestCase):
         expected = ['CASE', 'WHEN', 'a', '=', '1', 'THEN', "'good'", 'WHEN', 'a', '=', '0', 'THEN', "'bad'", "ELSE", "'dunno'", 'END']
         
         self.assertListEqual(case.tokens(), expected)
+        print(hash(case))
 
     def test_functions(self):
         print(type(fn.sum(col("a"))))

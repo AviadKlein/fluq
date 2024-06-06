@@ -642,6 +642,13 @@ class CaseExpression(SelectableExpression):
             exprs.append(self.otherwise)
         return exprs
     
+    def __hash__(self) -> int:
+        _base = self.__class__.__name__
+        if len(self.cases) == 0:
+            return hash(_base)
+        else:
+            return hash(_base + ''.join(self.tokens() + self.otherwise.tokens()))
+    
 
 class ExistsOperatorExpression(SelectableExpression):
 

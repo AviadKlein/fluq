@@ -126,4 +126,5 @@ class TestSql(TestCase):
         query: Frame = select(col("a"), col("b"), col("c"))
         filtered = query._get_expr().filter(lambda e: e.tokens()[0] == "a")
         self.assertEqual(filtered[0]._name.name, "a")
+        
 
