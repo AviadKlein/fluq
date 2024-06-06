@@ -44,7 +44,7 @@ print(type(query))
 `Frame` has many methods, among the rest is the `sql` property that renders the SQL code to run the query.
 
 ```python
-print(t.sql)
+print(query.sql)
 # Output: SELECT * FROM db.schema.table1
 ```
 
