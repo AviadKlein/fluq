@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from abc import abstractclassmethod
 from dataclasses import dataclass
-from typing import Callable, List, Optional
+from typing import List, Optional
 
 from fluq.expression.base import Expression, TerminalExpression, SelectableExpression
 
 
-class DateTimePart(TerminalExpression):
+class DateTimePartExpression(SelectableExpression, TerminalExpression):
     
     @abstractclassmethod
     def symbol(cls) -> str:
@@ -16,69 +16,108 @@ class DateTimePart(TerminalExpression):
     def tokens(self) -> List[str]:
         return [self.symbol()]
 
-class YearDateTimePart(DateTimePart):
+class YearDateTimePart(DateTimePartExpression):
 
     @classmethod
     def symbol(cls) -> str:
         return "YEAR"
     
-class QuarterDateTimePart(DateTimePart):
+class IsoYearDateTimePart(DateTimePartExpression):
+
+    @classmethod
+    def symbol(cls) -> str:
+        return "ISOYEAR"
+    
+class QuarterDateTimePart(DateTimePartExpression):
 
     @classmethod
     def symbol(cls) -> str:
         return "QUARTER"
     
-class MonthDateTimePart(DateTimePart):
+class MonthDateTimePart(DateTimePartExpression):
 
     @classmethod
     def symbol(cls) -> str:
         return "MONTH"
     
-class WeekDateTimePart(DateTimePart):
+class WeekDateTimePart(DateTimePartExpression):
 
+    def __init__(self, weekday: Optional[str]=None):
+        if weekday is not None:
+            if weekday not in ('SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'):
+                raise TypeError(f"wrong weekday, got '{weekday}'")
+        self.weekday = weekday
+        
     @classmethod
     def symbol(cls) -> str:
         return "WEEK"
     
-class DayDateTimePart(DateTimePart):
+    def tokens(self) -> List[str]:
+        _base = super().tokens()[0]
+        if self.weekday is None:
+            return [_base]
+        else:
+            return [f"{_base}({self.weekday})"]
+    
+
+class IsoWeekDateTimePart(DateTimePartExpression):
+
+    @classmethod
+    def symbol(cls) -> str:
+        return "ISOWEEK"
+
+    
+class DayDateTimePart(DateTimePartExpression):
 
     @classmethod
     def symbol(cls) -> str:
         return "DAY"
     
-class HourDateTimePart(DateTimePart):
+class HourDateTimePart(DateTimePartExpression):
 
     @classmethod
     def symbol(cls) -> str:
         return "HOUR"
     
-class MinuteDateTimePart(DateTimePart):
+class MinuteDateTimePart(DateTimePartExpression):
 
     @classmethod
     def symbol(cls) -> str:
         return "MINUTE"
     
-class SecondDateTimePart(DateTimePart):
+class SecondDateTimePart(DateTimePartExpression):
 
     @classmethod
     def symbol(cls) -> str:
         return "SECOND"
+    
+class MilliSecondDateTimePart(DateTimePartExpression):
+
+    @classmethod
+    def symbol(cls) -> str:
+        return "MILLISECOND"
+    
+class MicroSecondDateTimePart(DateTimePartExpression):
+
+    @classmethod
+    def symbol(cls) -> str:
+        return "MICROSECOND"
 
 
 class IntervalLiteralExpression(SelectableExpression):
 
     def __init__(self, duration: str | int,
-                 datetime_part: DateTimePart,
-                 convert_to: Optional[DateTimePart]=None):
+                 datetime_part: DateTimePartExpression,
+                 convert_to: Optional[DateTimePartExpression]=None):
         assert isinstance(duration, str | int)
-        assert isinstance(datetime_part, DateTimePart)
+        assert isinstance(datetime_part, DateTimePartExpression)
         if convert_to is not None:
-            assert isinstance(convert_to, DateTimePart)
+            assert isinstance(convert_to, DateTimePartExpression)
         self.duration = duration
         self.datetime_part = datetime_part
         self.convert_to = convert_to
 
-    def to(self, convert_to: DateTimePart) -> IntervalLiteralExpression:
+    def to(self, convert_to: DateTimePartExpression) -> IntervalLiteralExpression:
         if self.convert_to is not None:
             raise Exception()
         else:

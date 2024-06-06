@@ -1,5 +1,5 @@
 from fluq.sql import *
-from fluq.sql import functions as fn
+from fluq.sql import functions as fn, datetimeparts as dt
 
 from unittest import TestCase
 
@@ -49,8 +49,6 @@ class TestSql(TestCase):
     def test_tuple(self):
         query = table("t1").where(tup(col("id"), col("date")).is_in(lit(123), lit('2024-01-01'))).select("id")
         self.assertEqual(query.sql, "SELECT id FROM t1 WHERE ( id, date ) IN ( 123, '2024-01-01' )")
-    
-    
     
     def test_select(self):
         self.assertEqual(select(1,2,3).sql, "SELECT 1, 2, 3")
@@ -126,5 +124,10 @@ class TestSql(TestCase):
         query: Frame = select(col("a"), col("b"), col("c"))
         filtered = query._get_expr().filter(lambda e: e.tokens()[0] == "a")
         self.assertEqual(filtered[0]._name.name, "a")
+
+    def test_datetimepart_example(self):
+        friday = fn.date_trunc(col("date"), dt.WEEK.FRIDAY)
+        query = table("t").select(friday)
+        self.assertEqual(query.sql, "SELECT DATE_TRUNC( date, WEEK(FRIDAY) ) FROM t")
         
 

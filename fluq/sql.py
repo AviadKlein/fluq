@@ -1,14 +1,23 @@
+from __future__ import annotations
+
 from fluq._util import is_valid_json
 from fluq.expression.base import *
 from fluq.expression.function import *
 from fluq.expression.clause import *
 from fluq.expression.query import *
+from fluq.expression.literals import *
 from fluq.column import Column
 from fluq.expression.selectable import *
 from fluq.frame import Frame
 
 
 def col(name: str) -> Column:
+    """create a Column based on a known column name
+    
+    Usage:
+        >>> from fluq.sql import *
+        >>> customer_id = col("id")
+    """
     if not isinstance(name, str):
         raise TypeError(f"name must be of type str, got {type(name)}")
     return Column(expression=ColumnExpression(name), alias=None)
@@ -192,17 +201,122 @@ def unnest(obj: Column | ResultSet) -> Column:
     return Column(expression=expr, alias=None)
     
 
+
+class DateTimePart:
+    """
+    date_part, datetime_part or timestamp_part all in one
+    an object called 'datetimeparts' is created when importing fluq.sql
+    Usage:
+        >>> from fluq.sql import *
+        >>> from fluq.sql import functions as fn, datetimeparts as dt
+        >>> friday = fn.date_trunc(col("date"), dt.WEEK.FRIDAY)
+        >>> query = table("t").select(friday)
+        >>> print(query.sql) # Output: SELECT DATE_TRUNC( date, WEEK(FRIDAY) ) FROM t
+    """
+
+    def __init__(self, expr: Optional[DateTimePartExpression]=None):
+        self.expr = None
+        if expr is not None:
+            assert isinstance(expr, DateTimePartExpression)
+            self.expr = expr
+
+    @property
+    def ISOYEAR(self) -> DateTimePart:
+        return DateTimePart(IsoYearDateTimePart())
+    
+    @property
+    def YEAR(self) -> DateTimePart:
+        return DateTimePart(YearDateTimePart())
+    
+    @property
+    def MONTH(self) -> DateTimePart:
+        return DateTimePart(MonthDateTimePart())
+    
+    @property
+    def WEEK(self) -> DateTimePart:
+        return DateTimePart(WeekDateTimePart())
+    
+    @property
+    def ISOWEEK(self) -> DateTimePart:
+        return DateTimePart(IsoWeekDateTimePart())
+    
+    @property
+    def DAY(self) -> DateTimePart:
+        return DateTimePart(DayDateTimePart())
+    
+    @property
+    def HOUR(self) -> DateTimePart:
+        return DateTimePart(HourDateTimePart())
+    
+    @property
+    def MINUTE(self) -> DateTimePart:
+        return DateTimePart(MinuteDateTimePart())
+    
+    @property
+    def SECOND(self) -> DateTimePart:
+        return DateTimePart(SecondDateTimePart())
+    
+    @property
+    def MILLISECOND(self) -> DateTimePart:
+        return DateTimePart(MilliSecondDateTimePart())
+    
+    @property
+    def MICROSECOND(self) -> DateTimePart:
+        return DateTimePart(MicroSecondDateTimePart())
+    
+    def _weekday_spec_check(self):
+        if self.expr is None:
+            raise SyntaxError("expr is None, first use DateTimePart().WEEK")
+        elif not isinstance(self.expr, WeekDateTimePart):
+            raise SyntaxError(f"only WeekDateTimePart supports weekday specifications")
+    
+    @property
+    def SUNDAY(self) -> DateTimePart:
+        self._weekday_spec_check()
+        return DateTimePart(WeekDateTimePart('SUNDAY'))
+    
+    @property
+    def MONDAY(self) -> DateTimePart:
+        self._weekday_spec_check()
+        return DateTimePart(WeekDateTimePart('MONDAY'))
+    
+    @property
+    def TUESDAY(self) -> DateTimePart:
+        self._weekday_spec_check()
+        return DateTimePart(WeekDateTimePart('TUESDAY'))
+    
+    @property
+    def WEDNESDAY(self) -> DateTimePart:
+        self._weekday_spec_check()
+        return DateTimePart(WeekDateTimePart('WEDNESDAY'))
+    
+    @property
+    def THURSDAY(self) -> DateTimePart:
+        self._weekday_spec_check()
+        return DateTimePart(WeekDateTimePart('THURSDAY'))
+    
+    @property
+    def FRIDAY(self) -> DateTimePart:
+        self._weekday_spec_check()
+        return DateTimePart(WeekDateTimePart('FRIDAY'))
+    
+    @property
+    def SATURDAY(self) -> DateTimePart:
+        self._weekday_spec_check()
+        return DateTimePart(WeekDateTimePart('SATURDAY'))
+    
+
 class SQLFunctions:
     
     def create_dynamic_method(self, params: FunctionParams, is_distinct: bool=False):
         
-        def f(*cols: int | float | str | bool | Column) -> Column:
+        def f(*cols: int | float | str | bool | Column | DateTimePart) -> Column:
             cols = list(cols)
             exprs = []
             for col in cols:
                 if isinstance(col, int | float | str | bool):
                     exprs.append(LiteralExpression(col))
-                elif isinstance(col, Column):
+                elif isinstance(col, Column | DateTimePart):
                     exprs.append(col.expr)
                 else:
                     raise TypeError(f"unsupported type: {type(col)}")
@@ -222,3 +336,4 @@ class SQLFunctions:
                 setattr(self, f"{params.symbol.lower()}_distinct", f)
 
 functions = SQLFunctions()
+datetimeparts = DateTimePart()
