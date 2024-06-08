@@ -27,7 +27,8 @@ class ValidName:
     Raises:
         TypeError for invalide names
     """
-    name: str
+    _name: str
+    _backticks: bool=False
     
     @property
     def allowed_first_chars(self) -> str:
@@ -37,36 +38,88 @@ class ValidName:
     def allowed_last_chars(self) -> str:
         return self.allowed_first_chars + string.digits
     
-    @property
-    def allowed_mid_chars(self) -> str:
-        return self.allowed_last_chars + "."
+    def allowed_mid_chars(self, is_project_name: bool=False) -> str:
+        return self.allowed_last_chars + "." + ("-" if is_project_name else '')
     
     @staticmethod
     def remove_redundant_dots(s: str):
         return re.sub(r'\.+', '.', s)
 
+    def check_bad_chars(self, 
+                        partial_name: str, 
+                        bad_chars: List[Tuple[int, str]], 
+                        is_project_name: bool, 
+                        offset: int=0) -> List[Tuple[int, str]]:
+        for i, char in enumerate(partial_name):
+            bad_char_condition = (i == 0 and char not in self.allowed_first_chars)
+            bad_char_condition |= (0 < i < len(partial_name)-1 and char not in self.allowed_mid_chars(is_project_name))
+            bad_char_condition |= (i == len(partial_name)-1 and char not in self.allowed_last_chars)
+            if bad_char_condition:
+                bad_chars.append((i + offset, char))
+        return bad_chars
+
+
     def __post_init__(self):
-        match self.name:
-            case ValidName(name):
-                self.name = name
-            case str(name) if len(name) == 0:
-                raise TypeError("name cannot be an empty str")
-            case str(name) if name[0] == '`' and name[-1] == '`':
-                self.name = name
-            case str(name): 
-                bad_chars: List[Tuple[int, str]] = []
-                for i, char in enumerate(self.name):
-                    bad_char_condition = (i == 0 and char not in self.allowed_first_chars)
-                    bad_char_condition |= (0 < i < len(name)-1 and char not in self.allowed_mid_chars)
-                    bad_char_condition |= (i == len(name)-1 and char not in self.allowed_last_chars)
-                    if bad_char_condition:
-                            bad_chars.append((i, char))
-                if len(bad_chars) > 0:
-                    raise TypeError(f"illegal name, due to bad characters in these locations: {bad_chars}")
-        self.name = self.remove_redundant_dots(self.name)
+        bad_chars: List[Tuple[int, str]] = []
+        match (self._name, len(self._name)):
+            case (ValidName(name), _):
+                self._name = name
+            case (_, 0):
+                raise SyntaxError("name cannot be an empty str")
+            case (str(char), 1):
+                if char in self.allowed_first_chars:
+                    self._name = char
+                else:
+                    raise SyntaxError(f"'{char}' is not a valid single character name")
+            case (str(name), _) if name[0] == '`' and name[-1] == '`':
+                self._name = name[1:-1]
+                self._backticks = True
+            case (str(name), _) if len(name.split('.')) > 3:
+                raise SyntaxError(f"db paths can be triple at most, got {len(name.split('.'))}")
+            case (str(name), _) if len(name.split('.')) == 3:
+                offset = 0
+                result = ''
+                for i, spl in enumerate(name.split(',')):
+                    bad_chars = self.check_bad_chars(spl, 
+                                                     bad_chars=bad_chars, 
+                                                     is_project_name=True if i==0 else False, 
+                                                     offset=offset)
+                    if result == '':
+                        result = spl
+                    else:
+                        result += f".{spl}"
+                    offset += 1+len(spl)
+                self._name = result
+            case (str(name), _) if len(name.split('.')) == 2:
+                offset = 0
+                result = ''
+                for i, spl in enumerate(name.split(',')):
+                    bad_chars = self.check_bad_chars(spl, 
+                                                     bad_chars=bad_chars, 
+                                                     is_project_name=False, 
+                                                     offset=offset)
+                    if result == '':
+                        result = spl
+                    else:
+                        result += f".{spl}"
+                    offset += 1+len(spl)
+                self._name = result
+            case (str(name), _) if len(name.split('.')) == 1:
+                bad_chars = self.check_bad_chars(name, bad_chars=bad_chars, is_project_name=False, offset=0)
+                self._name = name
+        if len(bad_chars) > 0:
+            raise TypeError(f"illegal name, due to bad characters in these locations: {bad_chars}")
+        self._name = self.remove_redundant_dots(self._name)
 
     def last_identifer(self) -> str:
-        return self.name.split('.')[-1]
+        return self._name.split('.')[-1]
+    
+    @property
+    def name(self) -> str:
+        if self._backticks:
+            return f"`{self._name}`"
+        else:
+            return self._name
 
 
 # Expressions

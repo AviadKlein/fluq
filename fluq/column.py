@@ -156,7 +156,7 @@ class Column:
         
     @property
     def alias(self) -> Optional[str]:
-        return None if self._alias is None else self._alias.name
+        return None if self._alias is None else self._alias._name
     
     def as_(self, value: str):
         """change the alias"""

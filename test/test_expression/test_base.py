@@ -12,7 +12,7 @@ class TestValidName(TestCase):
             self.assertEqual(r.name, i)
 
     def test_validname_length(self):
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(SyntaxError) as cm:
             ValidName('')
         self.assertEqual("name cannot be an empty str", str(cm.exception))
 
@@ -32,14 +32,23 @@ class TestValidName(TestCase):
         with self.assertRaises(Exception) as cm:
             ValidName('a.')
         expected = "illegal name, due to bad characters in these locations: [(1, '.')]"
+        print(str(cm.exception))
         self.assertEqual(expected, str(cm.exception))
 
     def test_validname_dots(self):
         self.assertEqual(ValidName("a.b.c").name, "a.b.c")
-        self.assertEqual(ValidName("a....b..c").name, "a.b.c")
+        
+        with self.assertRaises(SyntaxError) as cm:
+            ValidName("a....b..c")
+        self.assertEqual("db paths can be triple at most, got 7", str(cm.exception))
 
     def test_validname_backticks(self):
         self.assertEqual(ValidName("`this is a backticked name`").name, "`this is a backticked name`")
+
+    def test_3_names_the_first_can_have_hypens(self):
+        name = "project-name-1.dataset_name.table_name"
+        result = ValidName("project-name-1.dataset_name.table_name").name
+        self.assertEqual(name, result)
 
 class TestExpression(TestCase):
 
