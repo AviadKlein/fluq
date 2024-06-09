@@ -306,8 +306,11 @@ class Column:
 
     def asc(self, nulls: Optional[str]=None) -> Column:
         """order by asc, if nulls is None, keeps whatever spec exists now"""
-        nulls = nulls.upper()
-        assert nulls in ("FIRST", "LAST") 
+        if nulls is None:
+            pass
+        else:
+            nulls = nulls.upper()
+            assert nulls in ("FIRST", "LAST") 
         new_spec = OrderBySpecExpression(asc=True, nulls=nulls if nulls is not None else self.order_by_spec.nulls)
         return Column(expression=self.expr, alias=self.alias, order_by_spec=new_spec)
     

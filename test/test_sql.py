@@ -81,6 +81,13 @@ class TestSql(TestCase):
     def test_coalesce(self):
         self.assertEqual(select(fn.coalesce(col("a"), col("b"), 0).as_("result")).sql, "SELECT COALESCE( a, b, 0 ) AS result")
 
+    def test_over(self):
+        expr = fn.sum(col("value")).over(WindowSpec().partition_by(col("a"), col("b")).order_by(col("c").asc(), col("d").desc())).expr
+        self.assertEqual("SUM( value ) OVER ( PARTITION BY a, b ORDER BY c ASC NULLS FIRST, d DESC NULLS FIRST )", expr.sql.str)
+
+        expr = fn.sum(col("value")).over(WindowSpec().partition_by(col("a"), col("b")).order_by(col("c").asc(), col("d").desc()).rows_between(-10,10)).expr
+        self.assertEqual("SUM( value ) OVER ( PARTITION BY a, b ORDER BY c ASC NULLS FIRST, d DESC NULLS FIRST ROWS BETWEEN 10 PRECEDING AND 10 FOLLOWING )", expr.sql.str)
+
     
     def test_examples_1(self):
         query = table("db.schema.table1").select("id")

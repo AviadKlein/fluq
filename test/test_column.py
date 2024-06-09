@@ -174,21 +174,21 @@ class TestColumn(TestCase):
 
         ws = WindowSpec().partition_by("a", "b")
         result = ws._to_expr().tokens()
-        self.assertEqual(result, ['PARTITION BY', 'a', 'b'])
+        self.assertEqual(result, ['PARTITION BY', 'a', ',', 'b'])
         
 
         ws = WindowSpec().partition_by(col("a"), col("b"))
         result = ws._to_expr().tokens()
-        self.assertEqual(result, ['PARTITION BY' ,'a', 'b'])
+        self.assertEqual(result, ['PARTITION BY' ,'a', ',', 'b'])
 
         ws = WindowSpec().partition_by(col("a"), col("b")).order_by("a")
         result = ws._to_expr().tokens()
         print(result)
-        self.assertEqual(result, ['PARTITION BY', 'a', 'b', 'ORDER BY', 'a', 'ASC NULLS FIRST'])
+        self.assertEqual(result, ['PARTITION BY', 'a', ',', 'b', 'ORDER BY', 'a', 'ASC NULLS FIRST'])
 
         ws = WindowSpec().partition_by(col("a"), col("b")).order_by(col("a").desc(nulls="last"))
         result = ws._to_expr().tokens()
-        self.assertEqual(result, ['PARTITION BY', 'a', 'b', 'ORDER BY', 'a', 'DESC NULLS LAST'])
+        self.assertEqual(result, ['PARTITION BY', 'a', ',', 'b', 'ORDER BY', 'a', 'DESC NULLS LAST'])
 
         ws = (
             WindowSpec().partition_by(col("a"), col("b"))
@@ -196,7 +196,7 @@ class TestColumn(TestCase):
             )
         
         result = ws._to_expr().tokens()
-        expected = ['PARTITION BY', 'a', 'b', 'ORDER BY', 'a' ,'DESC NULLS LAST', 'ROWS', 'BETWEEN', 'UNBOUNDED PRECEDING', 'AND', 'CURRENT ROW']
+        expected = ['PARTITION BY', 'a', ',', 'b', 'ORDER BY', 'a' ,'DESC NULLS LAST', 'ROWS', 'BETWEEN', 'UNBOUNDED PRECEDING', 'AND', 'CURRENT ROW']
         self.assertListEqual(result, expected)
 
     def test_window_spec_syntax_error_when_no_order_by_defined(self):

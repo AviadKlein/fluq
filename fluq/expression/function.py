@@ -115,18 +115,21 @@ class WindowSpecExpression(Expression):
                         head, *tail = part
                         part = head.tokens()
                         for elem in tail:
-                            part += elem.tokens()
+                            part += [',', *elem.tokens()]
                         result = [*result, 'PARTITION BY', *part]
                 match ord:
                     case None:
                         pass
                     case list(_):
-                        ord_result = []
-                        for expr, order_by_spec in ord:
+                        head, *tail = ord
+                        ord_result = head[0].tokens()
+                        if head[1] is not None:
+                            ord_result += [*head[1].tokens()]
+                        for expr, order_by_spec in tail:
                             curr = expr.tokens()
                             if order_by_spec is not None:
                                 curr = [*curr, *order_by_spec.tokens()]
-                            ord_result = [*ord_result, *curr]
+                            ord_result += [',', *curr]
                         result = [*result, 'ORDER BY', *ord_result]
                 match spec:
                     case None:
