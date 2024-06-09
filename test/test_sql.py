@@ -136,5 +136,15 @@ class TestSql(TestCase):
         friday = fn.date_trunc(col("date"), dt.WEEK.FRIDAY)
         query = table("t").select(friday)
         self.assertEqual(query.sql, "SELECT DATE_TRUNC( date, WEEK(FRIDAY) ) FROM t")
-        
+
+    def test_bug1(self):
+        query = (
+            table("t1").
+            group_by(col("a"), col("b")).
+            agg(fn.sum(col("value")).as_("total_value")).
+            order_by(col("a"), col("b"))
+        ).with_column("pct_value", fn.sum("total_value").over(WindowSpec().partition_by(col("a"))))
+        self.assertEqual(query.sql.str, "SELECT *, SUM( 'total_value' ) OVER ( PARTITION BY a ) AS pct_value FROM ( SELECT a, b, SUM( value ) AS total_value FROM t1 GROUP BY a, b ORDER BY a ASC NULLS FIRST, b ASC NULLS FIRST ) AS _t1")
+
+            
 

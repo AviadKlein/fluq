@@ -338,12 +338,12 @@ class Frame(ResultSet):
             AssertionError on types
 
         Examples:
-            >>> t = table("db.schema.t1").as_("t1").withColumn("depositor", col("deposits").gt(0))
+            >>> t = table("db.schema.t1").as_("t1").with_column("depositor", col("deposits").gt(0))
         """
         assert isinstance(col, Column)
         col = col.as_(alias)
         select_clause = SelectClauseExpression.from_args(ColumnExpression("*"), (col.expr, col.alias))
-        from_clause = FromClauseExpression(self._query_expr, alias="_t1")
+        from_clause = FromClauseExpression(query=self._query_expr, alias="_t1")
         query = QueryExpression(from_clause=from_clause, select_clause=select_clause)
         return Frame(queryable_expression=query)
 
