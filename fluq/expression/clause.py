@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from fluq.expression.base import *
 from fluq.expression.base import Expression
@@ -10,12 +10,24 @@ from fluq.expression.operator import LogicalOperationExpression, And, Or, UnNest
 from fluq.expression.selectable import ColumnExpression
 
 
-
 # Clauses
 class ClauseExpression(Expression):
     """abstract for clauses (i.e. Select, From, Where, ...)"""
 
 class SelectClauseExpression(ClauseExpression):
+    """Select expression
+
+    Initiation:
+        requires a list of SelectableExpression and a list of optional ValidNames
+        both lists need to be of the same order, to take care of this, 
+        it is recommended to instantiate with the classmethod 'from_args'
+
+    Initiation using 'from_args':
+        the user can create a list of either SelectableExpression or tuple SelectableExpression and alias
+        the list can have a mixture of these types.
+        internally, 'from_args' adds each item from the list using the 'add' method
+
+    """
 
     def __init__(self, expressions: List[SelectableExpression], aliases: List[Optional[ValidName]], distinct: bool= False):
         if len(expressions) != len(aliases):
@@ -38,6 +50,7 @@ class SelectClauseExpression(ClauseExpression):
         )
     
     def distinct(self) -> SelectableExpression:
+        """returns a copy of the expression with the DISTINCT keyword"""
         return self.copy(distinct=True)
         
 
@@ -46,6 +59,7 @@ class SelectClauseExpression(ClauseExpression):
         return ColumnExpression("*") in self.expressions
     
     def is_select_all(self) -> bool:
+        """checks wether the select is only 'select *'"""
         cond = len(self.expressions) == 1
         cond &= self._has_wilcard
         return cond
@@ -78,6 +92,8 @@ class SelectClauseExpression(ClauseExpression):
 
 
     def add(self, expression: SelectableExpression, alias: Optional[ValidName | str]=None) -> SelectClauseExpression:
+        """To allow for a builder-like pattern, adds an expression and optional alias
+        returns a new instance of the select clause"""
         expr, optional_alias = self._resolve_arg((expression, alias))
 
         return SelectClauseExpression(
@@ -102,7 +118,7 @@ class SelectClauseExpression(ClauseExpression):
     def wildcard(cls) -> SelectClauseExpression:
         return SelectClauseExpression([ColumnExpression("*")], [None])
 
-    def resolve_expr_tokens_and_alias(self, expr: Expression, alias: Optional[ValidName]):
+    def _resolve_expr_tokens_and_alias(self, expr: Expression, alias: Optional[ValidName]):
         expr = expr.tokens()
         if alias is not None:
             expr = [*expr, 'AS', alias.name]
@@ -111,7 +127,7 @@ class SelectClauseExpression(ClauseExpression):
     def tokens(self) -> List[str]:
         z = list(zip(self.expressions, self.aliases))
         exprs = []
-        for element in [self.resolve_expr_tokens_and_alias(expr, alias) for expr, alias in z]:
+        for element in [self._resolve_expr_tokens_and_alias(expr, alias) for expr, alias in z]:
             if isinstance(element, list):
                 exprs = [*exprs, ',' ,*element]
             else:
@@ -198,6 +214,7 @@ class FromClauseExpression(ClauseExpression):
             
     @property
     def alias(self) -> Optional[str]:
+        """returns the (optional) alias"""
         if (self._alias is None) or isinstance(self.from_item, JoinOperationExpression):
             return None
         else:
@@ -206,6 +223,8 @@ class FromClauseExpression(ClauseExpression):
     def cross_join(self, table: str | TableNameExpression, 
              alias: Optional[str]) -> FromClauseExpression:
         assert isinstance(table, str | TableNameExpression)
+        """perform a cross join operation on the existing 'from_item'
+        and returns a new FromClauseExpression"""
         if isinstance(table, str):
             table = TableNameExpression(table)
         if alias is not None:
@@ -223,6 +242,11 @@ class FromClauseExpression(ClauseExpression):
              alias: Optional[str], 
              join_type: str, 
              on: LogicalOperationExpression) -> FromClauseExpression:
+        """performs a 'join_type' operation on the existing 'from_item'
+        and returns a new FromClauseExpression
+        
+        allowed join_type: 'inner', 'left', 'right', 'full outer'
+        """
         assert isinstance(table, str | TableNameExpression)
         if isinstance(table, str):
             table = TableNameExpression(table)
@@ -270,7 +294,7 @@ class FromClauseExpression(ClauseExpression):
         return FromClauseExpression(join_expression=join_expression)
     
     def is_simple(self) -> bool:
-        """a simple from clause point to 1 table only"""
+        """a simple from clause points to 1 table only"""
         return isinstance(self.from_item, TableNameExpression)
     
     def tokens(self) -> List[str]:
@@ -315,24 +339,48 @@ class PredicateClauseExpression(ClauseExpression):
     
     
 class WhereClauseExpression(PredicateClauseExpression):
+    """Where clause
+    
+    Usage:
+        >>> logical_condition = Equal(ColumnExpression("id"), LiteralExpression(11))
+        >>> where = WhereClauseExpression(Equal(ColumnExpression("id"), LiteralExpression(11)))
+        >>> print(where.sql) # output: WHERE id = 11
+    """
     
     def clause_symbol(self) -> str:
         return "WHERE"
     
 
 class HavingClauseExpression(PredicateClauseExpression):
+    """Having clause
+    
+    Usage:
+        >>> logical_condition = Equal(ColumnExpression("id"), LiteralExpression(11))
+        >>> having = HavingClauseExpression(Equal(ColumnExpression("id"), LiteralExpression(11)))
+        >>> print(having.sql) # output: HAVING id = 11
+    """
     
     def clause_symbol(self) -> str:
         return "HAVING"
 
 
 class QualifyClauseExpression(PredicateClauseExpression):
+    """Qualify clause
+    
+    Usage:
+        >>> logical_condition = Equal(ColumnExpression("id"), LiteralExpression(11))
+        >>> qualify = QaulifyClauseExpression(Equal(ColumnExpression("id"), LiteralExpression(11)))
+        >>> print(qualify.sql) # output: QUALIFY id = 11
+    """
     
     def clause_symbol(self) -> str:
         return "QUALIFY"
 
 
 class GroupByClauseExpression(ClauseExpression):
+    """Group by clause expression.
+    
+    Instantiated by a list of SelectableExpression"""
 
     def __init__(self, *groupable_items: SelectableExpression):
         groupable_items = list(groupable_items)
@@ -345,7 +393,6 @@ class GroupByClauseExpression(ClauseExpression):
         
         self._expressions = groupable_items
 
-    
     def tokens(self) -> List[str]:
         if len(self._expressions) == 1:
             gi_tkns = self._expressions[0].tokens()
@@ -382,7 +429,6 @@ class OrderByClauseExpression(ClauseExpression):
         if len(_keys) != len(set(_keys)):
             raise TypeError("duplicate ordering items")
 
-    
     def resolve_expression_sql(self) -> str:
         result = []
         for expr, orderbyspec in self._expressions:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional
+from fluq._util import _copy_doc
 from fluq.expression.base import *
 from fluq.expression.query import QueryableExpression, QueryExpression
 from fluq.expression.clause import *
@@ -10,15 +11,6 @@ from fluq.expression.set_operation import *
 from fluq.column import Column
 from fluq.render import Renderable
 
-
-def _copy_doc(source, preamble: Optional[str]=None):
-    """decorator to copy __doc__ str between methods"""
-    def decorator(target):
-        target.__doc__ = source.__doc__
-        if preamble is not None:
-            target.__doc__ = f"{preamble}\n\n{target.__doc__}"
-        return target
-    return decorator
 
 class Frame(ResultSet):
     """The Frame API to writing SQL in a functional manner
