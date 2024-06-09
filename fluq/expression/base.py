@@ -207,7 +207,7 @@ class QueryableExpression(JoinableExpression):
 
 @dataclass
 class TableNameExpression(JoinableExpression, TerminalExpression):
-    db_path: ValidName | str
+    db_path: ValidName
 
     def __post_init__(self):
         assert isinstance(self.db_path, ValidName | str), f"only supported ValidName | str, got {type(self.db_path)=}"

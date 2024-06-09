@@ -285,12 +285,13 @@ class FromClauseExpression(ClauseExpression):
         return [self.from_item]
 
 
+@dataclass
 class PredicateClauseExpression(ClauseExpression):
     """an abstract class to suport WHERE, HAVING and QUALIFY clauses"""
+    logical_operation: LogicalOperationExpression
 
-    def __init__(self, logical_operation: LogicalOperationExpression):
-        assert isinstance(logical_operation, LogicalOperationExpression)
-        self.logical_operation = logical_operation
+    def __post_init__(self):
+        assert isinstance(self.logical_operation, LogicalOperationExpression)
 
     def and_(self, predicate: LogicalOperationExpression):
         assert isinstance(predicate, LogicalOperationExpression)
@@ -313,7 +314,6 @@ class PredicateClauseExpression(ClauseExpression):
         return [self.logical_operation]
     
     
-
 class WhereClauseExpression(PredicateClauseExpression):
     
     def clause_symbol(self) -> str:
