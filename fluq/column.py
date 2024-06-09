@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Tuple, Any
-from fluq.expression.base import *
-from fluq.expression.function import *
+from typing import Tuple, Any, Optional
+from fluq.expression.base import ResultSet
+from fluq.expression.function import FunctionParams, CaseExpression, AnalyticFunctionExpression, WindowFrameExpression, WindowSpecExpression
 from fluq.expression.literals import *
 from fluq.expression.operator import *
 from fluq.expression.datatype import *
@@ -524,7 +524,6 @@ class _CastColumnConstructor():
     def TIMESTAMP(self) -> Column:
         new_expr = CastExpression(self.expr, TimestampDataType())
         return Column(expression=new_expr, alias=None)
-
 
 
 @dataclass

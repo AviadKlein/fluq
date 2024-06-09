@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from fluq._util import is_valid_json
-from fluq.expression.base import *
-from fluq.expression.function import *
-from fluq.expression.clause import *
-from fluq.expression.query import *
+from fluq.expression.base import ResultSet
+from fluq.expression.function import ExistsOperatorExpression, CaseExpression, FunctionParams
 from fluq.expression.literals import *
 from fluq.column import Column
+from fluq.column import WindowSpec # not used in this module but is importat for users
 from fluq.expression.selectable import *
 from fluq.frame import Frame
 
@@ -116,6 +115,8 @@ def exists(query: Frame) -> Column:
 
 def select(*cols: int | float | str | bool | Column) -> Frame:
     """returns a SELECT frame with no FROM"""
+    from fluq.expression.clause import SelectClauseExpression
+    from fluq.expression.query import QueryExpression
     expressions = []
     aliases = []
     for col in cols:
@@ -178,6 +179,9 @@ def table(obj: str | Column) -> Frame:
             FROM db.schema.clients AS c LEFT OUTER JOIN db.schema.payments as p ON c.id = p.client_id
     
     """
+    from fluq.expression.base import TableNameExpression
+    from fluq.expression.clause import UnNestOperatorExpression, FromClauseExpression, SelectClauseExpression
+    from fluq.expression.query import QueryExpression
     match obj:
         case str(_):
             from_clause = FromClauseExpression(table=TableNameExpression(obj))    
@@ -191,6 +195,7 @@ def table(obj: str | Column) -> Frame:
     return Frame(queryable_expression=query)
 
 def unnest(obj: Column | ResultSet) -> Column:
+    from fluq.expression.clause import UnNestOperatorExpression
     match obj:
         case Column():
             expr = UnNestOperatorExpression(obj.expr)
@@ -309,6 +314,7 @@ class DateTimePart:
 class SQLFunctions:
     
     def create_dynamic_method(self, params: FunctionParams, is_distinct: bool=False):
+        from fluq.expression.function import AbstractFunctionExpression
         
         def f(*cols: int | float | str | bool | Column | DateTimePart) -> Column:
             cols = list(cols)
@@ -327,6 +333,7 @@ class SQLFunctions:
         return f
 
     def __init__(self):
+        from fluq.expression.function import SQLFunctionsGenerator
         self.function_expressions = SQLFunctionsGenerator()
         for params in self.function_expressions._params():
             f = self.create_dynamic_method(params=params)
@@ -335,5 +342,9 @@ class SQLFunctions:
                 f = self.create_dynamic_method(params=params, is_distinct=True)
                 setattr(self, f"{params.symbol.lower()}_distinct", f)
 
-functions = SQLFunctions()
-datetimeparts = DateTimePart()
+
+
+# module level constants
+#####################################
+functions = SQLFunctions() # recommend to import as fn
+datetimeparts = DateTimePart() # recommend to import as dt
