@@ -1,48 +1,71 @@
-import networkx as nx
-import matplotlib.pyplot as plt
+from typing import Dict, Tuple
+from dataclasses import dataclass, asdict
+
+import pydot
 
 from fluq.frame import Frame
-from fluq.expression.base import *
-from fluq.expression.query import *
+from fluq.expression.base import Expression, TableNameExpression
+from fluq.expression.clause import *
 
+@dataclass
+class Node:
+    label: str
+    shape: str
+    color: str | Tuple[int, int, int]
+    style: str='filled'
 
-class FrameGraph:
-
-    def __init__(self, frame: Frame) -> None:
-        self.g = nx.DiGraph()
-        self.frame = frame
-        self.expr = self.frame._get_expr()
-        match self.expr:
-            case QueryExpression(from_, where, group_by, select, having, qualify, order_by, limit):
-                if from_ is not None:
-                    self.g.add_node(hash(from_), label='FROM')
-                if where is not None:
-                    self.g.add_node(hash(where), label='WHERE')
-                    self.g.add_edge(hash(from_), hash(where))
-                if group_by is not None:
-                    self.g.add_node(hash(group_by), label='GROUP BY')
-                    source_id = hash(where) if where is not None else hash(from_)
-                    self.g.add_edge(source_id, hash(group_by))
-                
-                self.g.add_node(hash(select), label='SELECT')
-                if group_by is not None:
-                    self.g.add_edge(hash(group_by), hash(select))
-                elif where is not None:
-                    self.g.add_edge(hash(where), hash(select))
-                elif from_ is not None:
-                    self.g.add_edge(hash(from_), hash(select))
+    def __post_init__(self):
+        if isinstance(self.color, tuple):
+            assert len(self.color) == 3
+            assert all([0 <= _ <= 255 for _ in self.color])
+            color = '#'
+            for c in self.color:
+                h = hex(c).upper()
+                if len(h) == 3:
+                    color += f"0{h[-1]}"
+                elif len(h) == 4:
+                    color += h[-2:]
                 else:
-                    pass
+                    raise Exception(f"weird hex, {c=} and {h=}")
+            self.color = color
 
-                if order_by is not None:
-                    self.g.add_node(hash(order_by), label='ORDER BY')
-                    self.g.add_edge(hash(select), hash(order_by))
-                if limit is not None:
-                    self.g.add_node(hash(limit), label='LIMIT')
-                    source_id = hash(order_by) if order_by is not None else hash(select)
-                    self.g.add_edge(source_id, hash(order_by))
+    @property
+    def dict(self) -> Dict[str, str]:
+        return asdict(self)
 
-    def plot(self):
-        nx.draw(self.g, with_labels=True, node_color='lightblue', edge_color='gray', node_size=700, font_size=4)
-        plt.show()
+
+def expression_to_dot_node(expr: Expression) -> Node:
+    match expr:
+        case TableNameExpression(db_path):
+            return Node(label=db_path, shape='Mrecord', color='blue')
+        case PredicateClauseExpression(logical):
+            return Node(
+                label=(
+                    '<'
+                    '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
+                    '<TR><TD><B>Where</B></TD></TR>'
+                    f'<TR><TD>{logical.sql.str}</TD></TR>'
+                    '</TABLE>'
+                    '>'
+                    )
+                ,shape='box', color='gray')
+        case FromClauseExpression(_):
+            return Node(label='FROM', shape='Mrecord', color='blue')
+        case SelectClauseExpression(_):
+            expression_entries = []
+            for e, a in zip(expr.expressions, expr.aliases):
+                entry = e.sql
+                if a is not None:
+                    entry += f' AS {a}'
+                expression_entries.append(f'<TR><TD><B>{entry}</B></TD></TR>')
+            return Node(
+                label=
+                    '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0"><TR><TD><B>Where</B></TD></TR>'\
+                    +''.join(expression_entries)+'</TABLE>>',
+                shape='box', color='orange'
+                )
+        
+
+            
+
         

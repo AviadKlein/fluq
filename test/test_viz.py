@@ -1,23 +1,19 @@
 from unittest import TestCase
 
-from fluq.sql import *
-from fluq.sql import functions as fn
-from fluq.viz import FrameGraph
+from fluq.viz import *
+
+
+class TestNode(TestCase):
+
+    def test_node_creation(self):
+        node = Node(label='xx', shape='box', color='red')
+        self.assertDictEqual(
+            {'label': 'xx', 'shape': 'box', 'color': 'red', 'style': 'filled'}, node.dict)
+    
+    def test_color(self):
+        node = Node(label='xx', shape='box', color=(255, 255, 0))
+        self.assertEqual(node.color, '#FFFF00')
 
 
 
-class TestViz(TestCase):
-
-    def test_viz(self):
-        print(fn.sum(col("income")))
-        query = (
-            table("t1")
-            .where(col("date") > '2024-01-01')
-            .group_by(col("country"))
-            .agg(fn.sum(col("income")))
-            .order_by(col("sum_income").desc())
-            .limit(50)
-            )
-
-        viz = FrameGraph(query)
-        # viz.plot()
+        
