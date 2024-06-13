@@ -5,6 +5,15 @@ from unittest import TestCase
 
 class TestSql(TestCase):
 
+    def test_not(self):
+        c = lit(True)
+        self.assertEqual((~c).expr.sql.str, "NOT TRUE")
+        self.assertEqual(c.not_().expr.sql.str, "NOT TRUE")
+
+        c = col("date") >= '2013-06-09'
+        self.assertEqual((~c).expr.sql.str, "NOT ( date >= '2013-06-09' )")
+        self.assertEqual(c.not_().expr.sql.str, "NOT ( date >= '2013-06-09' )")
+    
     def test_wilcard_is_default(self):
         t = table("some.table")
         self.assertEqual(t.sql, "SELECT * FROM some.table")
@@ -88,6 +97,20 @@ class TestSql(TestCase):
         expr = fn.sum(col("value")).over(WindowSpec().partition_by(col("a"), col("b")).order_by(col("c").asc(), col("d").desc()).rows_between(-10,10)).expr
         self.assertEqual("SUM( value ) OVER ( PARTITION BY a, b ORDER BY c ASC NULLS FIRST, d DESC NULLS FIRST ROWS BETWEEN 10 PRECEDING AND 10 FOLLOWING )", expr.sql.str)
 
+    def test_pivot(self):
+        query = table("t").pivot(by_col="month").in_values('jan', 'feb', 'mar').agg(fn.sum(col("value")).as_("value"))
+        expected = ['SELECT', '*', 'FROM', 't', 'AS', 't', 'PIVOT', '(', 'SUM(', 'value', ')', 'AS', 'value', 'FOR', 'month', 'IN', '(', "'jan'", ',', "'feb'", ',', "'mar'", ')', ')']
+        self.assertListEqual(query._get_expr().tokens(), expected)
+
+    def test_pivot_is_not_simple(self):
+        query = table("t").pivot(by_col="month").in_values('jan', 'feb', 'mar').agg(fn.sum(col("value")).as_("value"))
+        self.assertFalse(query._is_simple())
+
+    def test_pivot_join(self):
+        query1 = table("t1").pivot(by_col="month").in_values('jan', 'feb', 'mar').agg(fn.sum(col("value")).as_("value"))
+        query2 = table("t2").pivot(by_col="month").in_values('jan', 'feb', 'mar').agg(fn.sum(col("value")).as_("value2"))
+        query = query1.as_("q1").join(query2.as_("q2"), on=col("q1.month") == col("q2.month"), join_type='inner')
+        self.assertListEqual(query._get_expr().tokens(), ['SELECT', '*', 'FROM', '(', 'SELECT', '*', 'FROM', 't1', 'AS', 't1', 'PIVOT', '(', 'SUM(', 'value', ')', 'AS', 'value', 'FOR', 'month', 'IN', '(', "'jan'", ',', "'feb'", ',', "'mar'", ')', ')', ')', 'AS', 'q1', 'INNER JOIN', '(', 'SELECT', '*', 'FROM', 't2', 'AS', 't2', 'PIVOT', '(', 'SUM(', 'value', ')', 'AS', 'value2', 'FOR', 'month', 'IN', '(', "'jan'", ',', "'feb'", ',', "'mar'", ')', ')', ')', 'AS', 'q2', 'ON', 'q1.month', '=', 'q2.month'])
     
     def test_examples_1(self):
         query = table("db.schema.table1").select("id")

@@ -396,12 +396,4 @@ class TestParseQueries(TestCase):
         s = """select 1,2,3"""
         result = parse_single_level(s, parsed_parenthesis=parse_parenthesis(s))
         print(result)
-
-    def test_simple_select_no_from(self):
-        s = """select 1,2,3"""
-        expected = SelectClauseExpression(
-            expressions=[LiteralExpression(1), LiteralExpression(2), LiteralExpression(3)],
-            aliases=[None, None, None]
-            )
-        self.fail("wip")
         

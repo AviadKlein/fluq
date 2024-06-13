@@ -44,14 +44,17 @@ class Frame(ResultSet):
                     pass
 
     def as_(self, alias: str) -> Frame:
+        """give the Frame an alias, sometimes required before joins or sub-querying"""
         assert isinstance(alias, str)
         return Frame(self._query_expr, alias)
     
     def _get_expr(self) -> Expression:
+        """private method to return the internal Expression"""
         return self._query_expr
     
     @property
     def alias(self) -> Optional[str]:
+        """the (optional) alias of the query"""
         return self._alias.name if self._alias is not None else None
     
     @alias.setter
@@ -77,15 +80,13 @@ class Frame(ResultSet):
             if the Frame has an alias, it too will be passed to the Column identifer
             >>> payments = table("db.schema.payments").as_("p")
             >>> id: Column = payments("id")
-            >>> print(id.alias)
-                p
+            >>> print(id.alias) # output: p.id
+                
 
             >>> payments = table("db.schema.payments")
             >>> query = payments.group_by(payments("id")).agg(sum("value"))
             >>> print(query.sql)
-                SELECT id, SUM(value)
-                FROM db.schema.payments
-                GROUP BY id
+            >>> # output: SELECT id, SUM(value) FROM db.schema.payments GROUP BY id
         """
         identifier = col if self.alias is None else f"{self.alias}.{col}"
         return Column(expression=ColumnExpression(identifier), alias=None)
@@ -311,6 +312,22 @@ class Frame(ResultSet):
         return self.cartesian(other)
 
     def group_by(self, *cols: Column) -> GroupByFrame:
+        """performs a group by operation
+        
+        Usage: 
+            >>> from fluq.sql import *
+            >>> from fluq.sql import functions as fn
+            >>> query = table("transactions").group_by(col("date")).agg(fn.sum(col("value")).as_("total_value"))
+            >>> print(query.sql) # output: SELECT date, SUM( value ) AS total_value FROM transactions GROUP BY date
+
+        for fluency's sake, much like pandas, polars and spark-sql, the 'group_by' operation returns a GroupByFrame
+        object which in turn has an 'agg' method much like 'select'
+
+            >>> gbf: GroupByFrame = table("transactions").group_by(col("date"))
+
+        As of version v0.1.5 - Frame.group_by does not enforce aggregate functions
+
+        """
         return GroupByFrame(
             query=self._query_expr, 
             alias=self.alias, 
@@ -330,7 +347,7 @@ class Frame(ResultSet):
             AssertionError on types
 
         Examples:
-            >>> t = table("db.schema.t1").as_("t1").with_column("depositor", col("deposits").gt(0))
+            >>> t = table("db.schema.t1").as_("t1").with_column("is_depositor", col("deposits").gt(0))
         """
         assert isinstance(col, Column)
         col = col.as_(alias)
@@ -342,12 +359,25 @@ class Frame(ResultSet):
     def limit(self, limit: int, offset: Optional[int] = None) -> Frame:
         """
         Add/Updates a Limit clause to the query
+
+        Usage:
+            >>> from fluq.sql import *
+            >>> query = table("players").select("id", "name").limit(20)
+            >>> print(query.sql) # output: SELECT id, name FROM players limit 20
+
+        Usage with offset:
+            >>> query = table("players").select("id", "name").limit(20, 10)
+            >>> print(query.sql) # output: SELECT id, name FROM players limit 20 OFFSET 10
+        
+        Raise:
+            Syntax error for illegal limit/offset values
+        
         """
         if not isinstance(limit, int):
-            raise TypeError(f"limit must be int, got {type(limit)}")
+            raise SyntaxError(f"limit must be int, got {type(limit)}")
         if offset is not None:
             if not isinstance(offset, int):
-                raise TypeError(f"offset, if defined, must be int, got {type(offset)}")
+                raise SyntaxError(f"offset, if defined, must be int, got {type(offset)}")
         limit_clause = LimitClauseExpression(limit=limit, offset=offset)
         new_query = None
         match self._query_expr:
@@ -358,7 +388,9 @@ class Frame(ResultSet):
                 raise NotImplementedError()
 
     def order_by(self, *cols: str | Column) -> Frame:
-        """Will replace any order by clause that exists"""
+        """
+        Adds an order by clause, will replace any order by clause that exists"""
+
         cols = list(cols)
         all_str = all([isinstance(_, str) for _ in cols])
         all_col = all([isinstance(_, Column) for _ in cols])
@@ -385,23 +417,27 @@ class Frame(ResultSet):
         return Frame(queryable_expression=set_operation)
 
     def union_all(self, other: Frame) -> Frame:
+        """perform a UNION ALL set operation"""
         return self._set_operation(other=other, operation=UnionAllSetOperation)
     
     def union_distinct(self, other: Frame) -> Frame:
+        """perform a UNION DISTINCT set operation"""
         return self._set_operation(other=other, operation=UnionDistinctSetOperation)
 
     def intersect_distinct(self, other: Frame) -> Frame:
+        """perform a INTERSECT DISTINCT set operation"""
         return self._set_operation(other=other, operation=IntersectSetOperation)
     
     def except_distinct(self, other: Frame) -> Frame:
+        """perform a EXCEPT DISTINCT set operation"""
         return self._set_operation(other=other, operation=ExceptSetOperation)
     
     def distinct(self) -> Frame:
-        """return a DISTINCT sql query
+        """returns a DISTINCT sql query
         
         Behavior:
          if the internal query is a simple one, will just append the DISTINCT keyword to the select clause
-         if the internal query is a set operation, will wrap the entire query as a sub-query and will SELECT DISTINCT * from it"""
+         if the internal query is a set operation, will wrap the entire query as a sub-query and will SELECT DISTINCT * FROM ..."""
         match self._query_expr:
             case QueryExpression(_):
                 new_select_clause = self._query_expr.select_clause.distinct()
@@ -417,30 +453,97 @@ class Frame(ResultSet):
                 return Frame(queryable_expression=new_query_expr, alias=None)
             case _:
                 raise TypeError(f"unsupported Querayble, got {type(self._query_expr)}")
+            
+    def pivot(self, by_col: Column | str, pivot_alias: Optional[str]=None) -> PivotFrame:
+        """
+        Perform a pivot operation on the 'from_item'
+
+        Args:
+            by_col: Column | str - the column to pivot by.
+            pivot_alias: optional alias for the pivot operator, can be used to select specific columns for additional expressions
+                see: https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#pivot_operator for more details.
         
+        Usage:
+            >>> from fluq.sql import *
+            >>> from fluq.sql import functions as fn
+            
+            >>> query = table("players").pivot(by_col=col("month")).in_values('Jan', 'Feb').agg(fn.sum(col("transactions")))
+            >>> print(query.sql) # output: SELECT * FROM players PIVOT (SUM(transactions) FOR month IN ('Jan', 'Feb'))
+
+        Naming the pivot operator with an alias can be done through the 'pivot_alias' parameter:
+            >>> query = (
+                table("players")
+                .pivot(by_col=col("month"), pivot_alias="pivot_players")
+                .in_values('Jan', 'Feb')
+                .agg(fn.sum(col("transactions")))
+                )
+            >>> print(query.sql) # output: SELECT * FROM players PIVOT (SUM(transactions) FOR month IN ('Jan', 'Feb')) as pivot_players
+
+        Notes:
+            1. Pivoting more complex queries will require an alias since the from_item will be wrapped in a subquery.
+            2. Unlike the SQL syntax: 
+                PIVOT (aggregate_function_call [as_alias][, ...]
+                FOR pivot_column
+                IN (values)) [AS pivot_alias]
+               We decided to change the order to: pivot_column -> in values -> agg functions, which makes more sense (to us)
+               To do so, we are using a couple of interim objects: PivotFrame and PivotFrame._InternalPivotFrame
+        """
+        # resolve expr
+        expr = None
+        if isinstance(by_col, str):
+            expr = ColumnExpression(by_col)
+        elif isinstance(by_col, Column):
+            expr = by_col.expr
+        else:
+            raise TypeError(f"by_col needs to ber either a str represnting a column name or a Column object")
+        return PivotFrame(frame=self, 
+                          pivot_expr=expr, 
+                          _pivot_alias=None if pivot_alias is None else ValidName(pivot_alias))
+        
+
     @property
     def sql(self) -> Renderable:
+        """
+        Renders the SQL code and returns a Renderable object.
+        See Renderable's documentation for understing how to format the output
+        
+        Although Renderable are printable, they are not str.
+
+        Usage:
+            >>> query = table("my_table")
+            >>> isinstance(query.sql, str) # output: False
+
+        Getting the string:
+            >>> # either by:
+            >>> isinstance(query.sql.str, str) # output: True
+            >>> # or:
+            >>> str(query.sql) # output: 'SELECT * FROM my_table'
+        """
         return self._query_expr.sql
 
     def source_table_names(self) -> List[str]:
+        """returns all source table names within the query"""
         exprs = self._get_expr().filter(predicate=lambda e: isinstance(e, TableNameExpression))
         return list(map(lambda e: e.db_path.name, exprs))
 
-class GroupByFrame:
 
-    def __init__(self, query: QueryExpression, alias: Optional[str], grouping_items: List[Column]):
+@dataclass
+class GroupByFrame:
+    query: QueryExpression
+    alias: Optional[str]
+    grouping_items: List[Column]
+
+    def __post_init__(self):
         # type checks
-        if not isinstance(query, QueryExpression):
-            raise TypeError(f"query must be QueryExpression, got {type(query)=}")
+        if not isinstance(self.query, QueryExpression):
+            raise TypeError(f"query must be QueryExpression, got {type(self.query)=}")
         
-        if not all([isinstance(_, Column) for _ in grouping_items]):
+        if not all([isinstance(_, Column) for _ in self.grouping_items]):
             raise TypeError("GroupByFrame only supports Column(s)")
 
         # resolve expressions and aliases
-        self.query = query
-        self.alias = alias
-        self.group_by_expr = [_.expr for _ in grouping_items]
-        self.group_by_aliases = [_.alias for _ in grouping_items]
+        self.group_by_expr = [_.expr for _ in self.grouping_items]
+        self.group_by_aliases = [_.alias for _ in self.grouping_items]
     
     def _resolve_expressions_and_aliases(self, *cols: Column) -> List[Tuple[Expression, Optional[str]]]:
         """returns a list of tuples
@@ -481,3 +584,75 @@ class GroupByFrame:
                 )
         return Frame(queryable_expression=new_query)
 
+@dataclass   
+class PivotFrame:
+    frame: Frame
+    pivot_expr: SelectableExpression
+    _pivot_alias: Optional[ValidName]=None
+
+    def __post_init__(self):
+        if not isinstance(self.frame, Frame):
+            raise TypeError()
+        if self._pivot_alias is not None:
+            if not isinstance(self._pivot_alias, ValidName):
+                raise TypeError()
+        if not isinstance(self.pivot_expr, SelectableExpression):
+            raise TypeError()
+    
+    def in_values(self, *values: str | bool | int | float):
+        values = list(values)
+        assert all([isinstance(v, str | bool | int | float) for v in values])
+        return _InternalPivotFrame(frame=self.frame, 
+                                              in_values=values,
+                                              pivot_expr=self.pivot_expr,
+                                              _pivot_alias=self._pivot_alias)
+
+
+@dataclass
+class _InternalPivotFrame:
+    frame: Frame
+    in_values: List[str | bool | int | float]
+    pivot_expr: SelectableExpression
+    _pivot_alias: Optional[ValidName]=None
+
+    def agg(self, *aggs: Column) -> Frame:
+        agg_exprs = []
+        aggs = list(aggs)
+        for agg in aggs:
+            if not isinstance(agg, Column):
+                raise TypeError(f'aggs must all be Column, got {type(agg)}')
+            agg_exprs.append((agg.expr, None if agg.alias is None else ValidName(agg.alias)))
+        
+        pivot_expr = PivotOperatorExpression(pivot_alias=self._pivot_alias, 
+                                             aggs=agg_exprs, 
+                                             pivot_expr=self.pivot_expr, 
+                                             pivot_values=self.in_values)
+        queryable_expr = self.frame._get_expr()
+        match queryable_expr:
+            case SetOperation(_, _):
+                match self.frame.alias:
+                    case None:
+                        raise SyntaxError("please provide an alias for the query before performing a pivot")
+                    case str(_alias):
+                        new_from_clause = FromClauseExpression(query=queryable_expr, alias=_alias, pivot=pivot_expr)
+            case QueryExpression(_):
+                match queryable_expr.from_clause.pivot_expr:
+                    case PivotOperatorExpression(_):
+                        raise SyntaxError('pivot expression already defined')
+                    case None:
+                        item, alias = queryable_expr.from_clause.from_item, self.frame.alias
+                        match (item, alias):
+                            case TableNameExpression(db_path), None:
+                                new_from_clause = FromClauseExpression(table=db_path.name, alias=None, pivot=pivot_expr)    
+                            case TableNameExpression(db_path), str(_alias):
+                                new_from_clause = FromClauseExpression(table=db_path.name, alias=_alias, pivot=pivot_expr)    
+                            case JoinOperationExpression(_), str(_alias):
+                                new_from_clause = FromClauseExpression(join_expression=item, alias=_alias, pivot=pivot_expr)     
+                            case UnNestOperatorExpression(_), str(_alias):
+                                new_from_clause = FromClauseExpression(table=item, alias=_alias, pivot=pivot_expr)
+                            case _, None:
+                                raise SyntaxError("please provide an alias for the query before performing a pivot")
+                            case _:
+                                raise NotImplementedError(f"unsupported item, got {type(item)}")
+        new_queryable = queryable_expr.copy(from_clause=new_from_clause)
+        return Frame(queryable_expression=new_queryable, alias=None)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 from dataclasses import dataclass
-from typing import Callable, Optional, List
+from typing import Optional, List
 
 from fluq.expression.base import Expression, QueryableExpression
 from fluq.expression.clause import FromClauseExpression, WhereClauseExpression, \

@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from abc import abstractmethod
-from typing import Callable, List
+from typing import Optional, List, Tuple, Union
 
-from fluq.expression.base import Expression, QueryableExpression, SelectableExpression, JoinableExpression
-from fluq.expression.selectable import LiteralExpression, LiteralTypes, NullExpression
+from fluq.expression.base import Expression, QueryableExpression, SelectableExpression, JoinableExpression, ValidName
+from fluq.expression.selectable import LiteralExpression, NullExpression
+from fluq._util import resolve_literal_to_str
 
 @dataclass
 class AbstractOperationExpression(SelectableExpression):
@@ -110,7 +111,7 @@ class LessOrEqual(LogicalOperationExpression):
 class In(LogicalOperationExpression):
 
     def __init__(self, left: SelectableExpression, 
-                 *args: SelectableExpression | LiteralTypes | QueryableExpression):
+                 *args: SelectableExpression | int | float | bool | str | QueryableExpression):
         assert isinstance(left, SelectableExpression)
         self.left = left
         self.is_query = False
@@ -130,7 +131,7 @@ class In(LogicalOperationExpression):
             all([isinstance(_, str) for _ in args]):
             self._list = [LiteralExpression(_) for _ in args]
         else:
-            msg = "list of expressions can be SelectableExpression | LiteralTypes"
+            msg = "list of expressions can be SelectableExpression | int | float | bool | str"
             msg += "\n"
             msg += f"{args} has types: ({[type(_) for _ in args]}), respectively"
             raise TypeError(msg)
@@ -172,7 +173,11 @@ class Not(SelectableExpression):
         self.expr = expr
 
     def tokens(self) -> List[str]:
-        return ['NOT', *self.expr.tokens()]
+        internal_tokens = self.expr.tokens()
+        if len(internal_tokens) == 1:
+            return ['NOT', internal_tokens[0]]
+        else:
+            return ['NOT', '(', *internal_tokens,')']
     
     def sub_expressions(self) -> List[Expression]:
         return [self.expr]
@@ -359,3 +364,67 @@ class UnNestOperatorExpression(SelectableExpression, JoinableExpression):
     
     def sub_expressions(self) -> List[Expression]:
         return [self.expr]
+    
+@dataclass
+class PivotOperatorExpression(Expression):
+    pivot_alias: Optional[str]
+    aggs: List[Tuple[SelectableExpression, Optional[ValidName]]]
+    pivot_expr: SelectableExpression
+    pivot_values: List[str | int | bool | float]
+
+    def __post_init__(self):
+        if not isinstance(self.aggs, list):
+            raise TypeError()
+        if len(self.aggs) == 0:
+            raise TypeError()
+        for expr, op_vn in self.aggs:
+            if not isinstance(expr, SelectableExpression):
+                raise TypeError()
+            if op_vn is not None:
+                if not isinstance(op_vn, ValidName):
+                    raise TypeError()
+        if not isinstance(self.pivot_expr, SelectableExpression):
+            raise TypeError()
+        if not isinstance(self.pivot_values, list):
+            raise TypeError()
+        if len(self.pivot_values) == 0:
+            raise TypeError()
+        for value in self.pivot_values:
+            if not isinstance(value, str | int | bool | float):
+                raise TypeError()
+            
+    def _pivot_values_tokens(self) -> List[str]:
+        head, *tail = self.pivot_values
+        result = [resolve_literal_to_str(head)]
+        for value in tail:
+            result += [',', resolve_literal_to_str(value)]
+        return result
+    
+    @staticmethod
+    def _resolve_agg_tokens(expr: SelectableExpression, 
+                            optional_name: Optional[ValidName]) -> List[str]:
+        result = expr.tokens()
+        if optional_name is not None:
+            result += ['AS', optional_name.name]
+        return result
+
+    def _aggs_tokens(self) -> List[str]:
+        head, *tail = self.aggs
+        expr, op_vn = head
+        result = self._resolve_agg_tokens(expr, op_vn)
+        for elem in tail:
+            result += [',', *self._resolve_agg_tokens(elem[0], elem[1])]
+        return result
+    
+    def tokens(self) -> List[str]:
+        result = ['PIVOT', '(', 
+                *self._aggs_tokens(),
+                'FOR', *self.pivot_expr.tokens(), 
+                'IN', '(', *self._pivot_values_tokens(),')' ,
+                ')']
+        if self.pivot_alias is not None:
+            result += ['AS', self.pivot_alias]
+        return result
+    
+    def sub_expressions(self) -> List[Expression]:
+        return [*self.aggs, self.pivot_expr]

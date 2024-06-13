@@ -54,7 +54,7 @@ class Column:
         else:
             return False
 
-    def __init__(self, **kwargs: str | Tuple[str, str] | Expression | Tuple[Expression, str]):
+    def __init__(self, **kwargs: str | Tuple[str, str] | SelectableExpression | Tuple[SelectableExpression, str]):
         """it is recommended to use the functions.col/lit/when methods to initialize Column 
         and to avoid the complex use of Expressions.
         
@@ -62,9 +62,7 @@ class Column:
         either:
             name: str - a name of a physical column
         or:
-            expression: Expression object of these types (and descendants): 
-                ColumnExpression, LiteralExpression, NullExpression, 
-                AbstractOperationExpression, AbstractFunctionExpression, NegatedExpression 
+            expression: SelectableExpression
 
         The user can include an optional alias: str.
         The user can include an optional OrderBySpecExpression.
@@ -285,6 +283,12 @@ class Column:
             raise TypeError("")
         new_expr = IndexOperatorExpression(self.expr, index=index)
         return Column(expression=new_expr, alias=None)
+    
+    def __invert__(self) -> Column:
+        return Column(expression=Not(self.expr), alias=None)
+    
+    def not_(self) -> Column:
+        return self.__invert__()
     
     def when(self, condition: Column, value: str | int | float | bool | Column) -> Column:
         """only works when the expr is a CaseExpression"""

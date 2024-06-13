@@ -58,7 +58,7 @@ class TestClause(TestCase):
     def test_from_clause_cross_join(self):
         fc = (
             FromClauseExpression(table="db.schema.table1", alias="A")
-                .cross_join(table="db.schema.table1", alias="B")
+                .cross_join(joinable="db.schema.table1", alias="B")
         )
         self.assertEqual(fc.sql, "FROM db.schema.table1 AS A CROSS JOIN db.schema.table1 AS B")
         self.assertListEqual(fc.tokens(), ['FROM', 'db.schema.table1', 'AS', 'A', 'CROSS JOIN', 'db.schema.table1', 'AS', 'B'])
@@ -89,7 +89,7 @@ class TestClause(TestCase):
             select_clause=SelectClauseExpression([ColumnExpression("a"), ColumnExpression("b")], [None, None])
             )
         # fails when there's no alias
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(SyntaxError) as cm:
             FromClauseExpression(query=query)
         self.assertEqual(str(cm.exception), "when calling with 1 key word argument, only 'table' and 'join_expression' are supported, got 'query'")
 
@@ -99,12 +99,12 @@ class TestClause(TestCase):
 
     def test_from_clause_bad_arguments(self):
         # 1 argument
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(SyntaxError) as cm:
             FromClauseExpression(tabl="foo")
         self.assertEqual("when calling with 1 key word argument, only 'table' and 'join_expression' are supported, got 'tabl'", str(cm.exception))
 
         # 2 arguments
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(SyntaxError) as cm:
             FromClauseExpression(table="foo", join_expression="bar")
         self.assertEqual("when calling with 2 key word arguments, either ('table', 'alias') or ('query', 'alias') are supported, got 'table' and 'join_expression'", str(cm.exception))
 

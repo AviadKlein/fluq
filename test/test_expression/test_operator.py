@@ -51,3 +51,33 @@ class TestOperator(TestCase):
         expr = In(ColumnExpression("a"), query)
         expected = "a IN ( SELECT id FROM db.schema.table1 )"
         self.assertEqual(expr.sql, expected)
+
+    def test_pivot_operator_no_aliases(self):
+        pivot = PivotOperatorExpression(
+            pivot_alias=None, 
+            aggs=[(LiteralExpression('xxx'), None)], 
+            pivot_expr=ColumnExpression("group"), 
+            pivot_values=[1,2,3]
+        )
+        print(pivot.tokens())
+        self.assertListEqual(pivot.tokens(), ['PIVOT', '(', "'xxx'", 'FOR', 'group', 'IN', '(', '1', ',', '2', ',', '3', ')', ')'])
+
+    def test_pivot_operator_agg_alias(self):
+        pivot = PivotOperatorExpression(
+            pivot_alias=None, 
+            aggs=[(LiteralExpression('xxx'), ValidName('v'))], 
+            pivot_expr=ColumnExpression("group"), 
+            pivot_values=[1,2,3]
+        )
+        print(pivot.tokens())
+        self.assertListEqual(pivot.tokens(), ['PIVOT', '(', "'xxx'", 'AS', 'v', 'FOR', 'group', 'IN', '(', '1', ',', '2', ',', '3', ')', ')'])
+
+    def test_pivot_operator_agg_alias_pivot_alias(self):
+        pivot = PivotOperatorExpression(
+            pivot_alias='pvt', 
+            aggs=[(LiteralExpression('xxx'), ValidName('v'))], 
+            pivot_expr=ColumnExpression("group"), 
+            pivot_values=[1,2,3]
+        )
+        print(pivot.tokens())
+        self.assertListEqual(pivot.tokens(), ['PIVOT', '(', "'xxx'", 'AS', 'v', 'FOR', 'group', 'IN', '(', '1', ',', '2', ',', '3', ')', ')', 'AS', 'pvt'])

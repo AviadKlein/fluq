@@ -6,7 +6,7 @@ from fluq.expression.base import *
 from fluq.expression.base import Expression
 from fluq.expression.join import *
 from fluq.expression.literals import OrderBySpecExpression
-from fluq.expression.operator import LogicalOperationExpression, And, Or, UnNestOperatorExpression
+from fluq.expression.operator import LogicalOperationExpression, And, Or, UnNestOperatorExpression, PivotOperatorExpression
 from fluq.expression.selectable import ColumnExpression
 
 
@@ -172,9 +172,20 @@ class FromClauseExpression(ClauseExpression):
     with sub-queries:
     >>> q: QueryAble = ...
     >>> fc = FromClauseExpression(query=q, alias="t")
+
+    use PIVOT operators (requires alias to be defined):
+    >>> fc = FromClauseExpression(table="db.schema.table1", alias="t1", pivot=PivotOperatorExpression(...))
+    or use a query
+    >>> q: QueryAble = ...
+    >>> fc = FromClauseExpression(query=q, alias="t", pivot=PivotOperatorExpression(...))
+    or use a join_expression
+    >>> fc = FromClauseExpression(join_expression=JoinOperationExpression(...), alias="t", pivot=PivotOperatorExpression(...))
     """
     
     def __init__(self, **kwargs) -> None:
+        self.from_item = None
+        self._alias = None
+        self.pivot_expr = None
         match len(kwargs):
             case 1:
                 key = list(kwargs.keys())[0]
@@ -187,7 +198,7 @@ class FromClauseExpression(ClauseExpression):
                         self.from_item = item
                         self._alias = None
                     case _:
-                        raise TypeError(f"when calling with 1 key word argument, only 'table' and 'join_expression' are supported, got '{key}'")
+                        raise SyntaxError(f"when calling with 1 key word argument, only 'table' and 'join_expression' are supported, got '{key}'")
             case 2:
                 key1, key2 = list(kwargs.keys())
                 match (key1, key2):
@@ -198,19 +209,47 @@ class FromClauseExpression(ClauseExpression):
                         if isinstance(table_like, str):
                             table_like = TableNameExpression(table_like)
                         assert isinstance(alias, str)
-                        self._alias = ValidName(alias)
                         self.from_item = table_like
+                        self._alias = ValidName(alias)
                     case ('query', 'alias'):
                         query = kwargs[key1]
                         alias = kwargs[key2]
                         assert isinstance(query, QueryableExpression)
                         assert isinstance(alias, str)
-                        self._alias = ValidName(alias)
                         self.from_item = query
+                        self._alias = ValidName(alias)
+                        
                     case _:
-                        raise TypeError(f"when calling with 2 key word arguments, either ('table', 'alias') or ('query', 'alias') are supported, got '{key1}' and '{key2}'")
+                        raise SyntaxError(f"when calling with 2 key word arguments, either ('table', 'alias') or ('query', 'alias') are supported, got '{key1}' and '{key2}'")
+            case 3:
+                key1, key2, key3 = list(kwargs.keys())
+                match (key1, key2, key3):
+                    case (key1, 'alias', 'pivot'):
+                        self._alias = ValidName(kwargs[key2])
+                        if isinstance(kwargs[key3], PivotOperatorExpression):
+                            self.pivot_expr = kwargs[key3]
+                        else:
+                            raise TypeError(f'pivot argument needs to be of type PivotOperatorExpression, got {type(kwargs[key3])}')
+                        match key1:
+                            case 'table':
+                                item = kwargs[key1]
+                                if not isinstance(item, str | TableNameExpression | UnNestOperatorExpression):
+                                    raise TypeError(f"`table` should by either str | TableNameExpression | UnNestOperatorExpression, got {type(item)}")
+                                if isinstance(item, str):
+                                    item = TableNameExpression(item)
+                                self.from_item = item
+                            case 'query':
+                                item = kwargs[key1]
+                                assert isinstance(item, QueryableExpression)
+                                self.from_item = item
+                            case 'join_expression':
+                                item = kwargs[key1]
+                                assert isinstance(item, JoinOperationExpression)
+                                self.from_item = item
+                    case _:
+                        raise SyntaxError(f"""when calling with 3 kwargs, the following are supported: ('table/query/join_expression', 'alias', 'pivot'), got {(key1, key2, key3)}""")
             case _:
-                raise TypeError("only supporting kwargs of length 1 or 2")
+                raise TypeError(f"only supporting kwargs of length 1, 2 or 3, got {len(kwargs)}")
             
     @property
     def alias(self) -> Optional[str]:
@@ -220,25 +259,25 @@ class FromClauseExpression(ClauseExpression):
         else:
             return self._alias.name
             
-    def cross_join(self, table: str | TableNameExpression, 
+    def cross_join(self, joinable: str | JoinableExpression, 
              alias: Optional[str]) -> FromClauseExpression:
-        assert isinstance(table, str | TableNameExpression)
+        assert isinstance(joinable, str | JoinableExpression)
         """perform a cross join operation on the existing 'from_item'
         and returns a new FromClauseExpression"""
-        if isinstance(table, str):
-            table = TableNameExpression(table)
+        if isinstance(joinable, str):
+            joinable = TableNameExpression(joinable)
         if alias is not None:
             assert isinstance(alias, str)
             alias = ValidName(alias)
         join_expression = CrossJoinOperationExpression(
             left=self.from_item,
-            right=table,
+            right=joinable,
             left_alias=self.alias,
             right_alias=alias.name if alias is not None else None
         )
         return FromClauseExpression(join_expression=join_expression)
     
-    def join(self, table: str | TableNameExpression, 
+    def join(self, table: str | JoinableExpression, 
              alias: Optional[str], 
              join_type: str, 
              on: LogicalOperationExpression) -> FromClauseExpression:
@@ -247,7 +286,7 @@ class FromClauseExpression(ClauseExpression):
         
         allowed join_type: 'inner', 'left', 'right', 'full outer'
         """
-        assert isinstance(table, str | TableNameExpression)
+        assert isinstance(table, str | JoinableExpression)
         if isinstance(table, str):
             table = TableNameExpression(table)
         if alias is not None:
@@ -295,7 +334,7 @@ class FromClauseExpression(ClauseExpression):
     
     def is_simple(self) -> bool:
         """a simple from clause points to 1 table only"""
-        return isinstance(self.from_item, TableNameExpression)
+        return isinstance(self.from_item, TableNameExpression) and (self.pivot_expr is None)
     
     def tokens(self) -> List[str]:
         from_item_tkns = self.from_item.tokens()
@@ -303,6 +342,8 @@ class FromClauseExpression(ClauseExpression):
             from_item_tkns = ['(',*from_item_tkns,')']
         if self.alias is not None:
             from_item_tkns = [*from_item_tkns, 'AS', self.alias]
+        if self.pivot_expr is not None:
+            from_item_tkns = [*from_item_tkns, *self.pivot_expr.tokens()]
         return ['FROM', *from_item_tkns]
     
     def sub_expressions(self) -> List[Expression]:

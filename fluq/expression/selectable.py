@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Tuple
 from fluq.expression.base import Expression, SelectableExpression, ValidName, TerminalExpression
+from fluq._util import resolve_literal_to_str
 
 
 class AnyExpression(SelectableExpression, TerminalExpression):
@@ -52,24 +53,13 @@ class ColumnExpression(SelectableExpression, TerminalExpression):
     def __hash__(self) -> int:
         return hash(self.__class__.__name__ + self.name)
 
-
-LiteralTypes = int | float | bool | str
-
-
+@dataclass
 class LiteralExpression(SelectableExpression, TerminalExpression):
     """to hold numbers, strings, booleans"""
+    value: int | float | bool | str
 
-    def __init__(self, value: LiteralTypes) -> None:
-        super().__init__()
-        self.value = value
-        if isinstance(value, bool):
-            self.sql_value = str(value).upper()
-        elif isinstance(value, str):
-            self.sql_value = f"'{value}'"
-        elif isinstance(value, (float, int)):
-            self.sql_value = str(value)
-        else:
-            raise TypeError()
+    def __post_init__(self):
+        self.sql_value = resolve_literal_to_str(self.value)
 
     def tokens(self) -> str:
         return [self.sql_value]
@@ -83,8 +73,13 @@ class NegatedExpression(SelectableExpression):
         self.expr = expr
 
     def tokens(self) -> List[str]:
-        head, *tail = self.expr.tokens()
-        return [f'-{head}', *tail]
+        match self.expr:
+            case LiteralExpression(_):
+                return [f'-{self.expr.tokens()[0]}']
+            case ColumnExpression(_):
+                return [f'-{self.expr.tokens()[0]}']
+            case _:
+                return [f'-', '(', *self.expr.tokens(), ')']
     
     def sub_expressions(self) -> List[Expression]:
         return [self.expr]
@@ -126,11 +121,11 @@ class JSONExpression(SelectableExpression, TerminalExpression):
 
 class TupleExpression(SelectableExpression):
 
-    def __init__(self, *args: LiteralTypes | ColumnExpression | LiteralExpression | TupleExpression) -> None:
+    def __init__(self, *args: int | float | bool | str | ColumnExpression | LiteralExpression | TupleExpression) -> None:
         args = list(args)
         self.elements = []
         for arg in args:
-            if isinstance(arg, LiteralTypes):
+            if isinstance(arg, int | float | bool | str):
                 self.elements.append(LiteralExpression(arg))
             elif isinstance(arg, ColumnExpression | LiteralExpression):
                 self.elements.append(arg)
