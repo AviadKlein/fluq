@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="fluq",  
-    version="0.1.5",
+    version="0.1.6",
     author="Aviad Klein",
     author_email="aviad.klein@gmail.com",
     description="Python style api for heavy SQL writers",
