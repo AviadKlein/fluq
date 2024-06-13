@@ -215,9 +215,8 @@ class FromClauseExpression(ClauseExpression):
                         query = kwargs[key1]
                         alias = kwargs[key2]
                         assert isinstance(query, QueryableExpression)
-                        assert isinstance(alias, str)
                         self.from_item = query
-                        self._alias = ValidName(alias)
+                        self._alias = ValidName(alias) if alias is not None else None
                         
                     case _:
                         raise SyntaxError(f"when calling with 2 key word arguments, either ('table', 'alias') or ('query', 'alias') are supported, got '{key1}' and '{key2}'")

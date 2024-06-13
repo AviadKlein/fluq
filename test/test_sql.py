@@ -13,6 +13,19 @@ class TestSql(TestCase):
         c = col("date") >= '2013-06-09'
         self.assertEqual((~c).expr.sql.str, "NOT ( date >= '2013-06-09' )")
         self.assertEqual(c.not_().expr.sql.str, "NOT ( date >= '2013-06-09' )")
+
+    def test_multiple_where(self):
+        t = table("some.table").where(col("date") > '2013-06-09').where(col("date") < '2017-04-10')
+        self.assertEqual(t.sql.str, "SELECT * FROM some.table WHERE ( date > '2013-06-09' ) AND ( date < '2017-04-10' )")
+
+        t = table("some.table").where(col("date") > '2013-06-09').select("id", "name").where(col("date") < '2017-04-10')
+        self.assertEqual(t.sql.str, "SELECT id, name FROM some.table WHERE ( date > '2013-06-09' ) AND ( date < '2017-04-10' )")
+
+    def test_query_with_column_and_then_where(self):
+        t = table("some.table").where(col("date") > '2013-06-09').group_by(col("date")).agg(fn.sum(col("value")).as_("value"))
+        t2 = t.with_column("vsqrt", fn.sqrt(col("value"))).with_column("vcbrt", fn.cbrt(col("value")))
+        t3 = t2.where(col("vsqrt") > 5)
+        self.assertEqual(t3.sql.str, """SELECT *, CBRT( value ) AS vcbrt FROM ( SELECT *, SQRT( value ) AS vsqrt FROM ( SELECT date, SUM( value ) AS value FROM ( SELECT * FROM some.table WHERE date > '2013-06-09' ) AS table GROUP BY date ) ) WHERE vsqrt > 5""")
     
     def test_wilcard_is_default(self):
         t = table("some.table")
@@ -167,7 +180,5 @@ class TestSql(TestCase):
             agg(fn.sum(col("value")).as_("total_value")).
             order_by(col("a"), col("b"))
         ).with_column("pct_value", fn.sum("total_value").over(WindowSpec().partition_by(col("a"))))
-        self.assertEqual(query.sql.str, "SELECT *, SUM( 'total_value' ) OVER ( PARTITION BY a ) AS pct_value FROM ( SELECT a, b, SUM( value ) AS total_value FROM t1 GROUP BY a, b ORDER BY a ASC NULLS FIRST, b ASC NULLS FIRST ) AS _t1")
-
-            
+        self.assertEqual(query.sql.str, "SELECT *, SUM( 'total_value' ) OVER ( PARTITION BY a ) AS pct_value FROM ( SELECT a, b, SUM( value ) AS total_value FROM t1 GROUP BY a, b ORDER BY a ASC NULLS FIRST, b ASC NULLS FIRST )")
 

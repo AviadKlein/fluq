@@ -352,7 +352,7 @@ class Frame(ResultSet):
         assert isinstance(col, Column)
         col = col.as_(alias)
         select_clause = SelectClauseExpression.from_args(ColumnExpression("*"), (col.expr, col.alias))
-        from_clause = FromClauseExpression(query=self._query_expr, alias="_t1")
+        from_clause = FromClauseExpression(query=self._query_expr, alias=None)
         query = QueryExpression(from_clause=from_clause, select_clause=select_clause)
         return Frame(queryable_expression=query)
 
