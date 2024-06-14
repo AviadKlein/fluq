@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, Optional, List
+from typing import Optional, List
 from collections import Counter
 from abc import abstractmethod
 

@@ -90,7 +90,8 @@ class Frame(ResultSet):
         """
         identifier = col if self.alias is None else f"{self.alias}.{col}"
         return Column(expression=ColumnExpression(identifier), alias=None)
-    
+
+            
     def select(self, *args: str | Column) -> Frame:
         """Select columns
         
@@ -499,6 +500,21 @@ class Frame(ResultSet):
         return PivotFrame(frame=self, 
                           pivot_expr=expr, 
                           _pivot_alias=None if pivot_alias is None else ValidName(pivot_alias))
+    
+    def unpivot(self, by_col: Column | str, unpivot_alias: Optional[str]=None):
+        raise NotImplementedError("still in development")
+    
+    def create(self, target: str, object_type: str):
+        raise NotImplementedError("still in development")
+    
+    def create_or_replace(self, target: str, object_type: str):
+        raise NotImplementedError("still in development")
+    
+    def create_and_then(self, target: str, object_type: str) -> Frame:
+        raise NotImplementedError("still in development")
+    
+    def create_or_replace_and_then(self, target: str, object_type: str) -> Frame:
+        raise NotImplementedError("still in development")
         
 
     @property

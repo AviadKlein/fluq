@@ -5,6 +5,48 @@ from unittest import TestCase
 
 class TestSql(TestCase):
 
+    def test_from_tuples(self):
+        tuples = [(1, 'bob'), (2, 'joe'), (3, 'tim')]
+        col_names = ['id', 'name']
+        frame = from_tuples(col_names, *tuples)
+        self.assertIsInstance(frame, Frame)
+        self.assertEqual(frame.sql.str, "SELECT 1 AS id, 'bob' AS name UNION ALL ( SELECT 3 AS id, 'tim' AS name UNION ALL ( SELECT 2 AS id, 'joe' AS name ) )")
+
+    def test_from_tuples_mismatched_column_length(self):
+        col_names = ['id', 'name']
+        tuples = [
+            (1, 'bob'),
+            (2, 'joe', 'extra')
+        ]
+        with self.assertRaises(TypeError) as cm:
+            from_tuples(col_names, *tuples)
+        self.assertEqual(str(cm.exception), "the following tuples: [1] have mis-matching lengths with the number of column names")
+
+    def test_from_tuples_type_validation(self):
+        col_names = ['id', 'name']
+        tuples = [
+            (1, 'bob'),
+            (2, 3)
+        ]
+        with self.assertRaises(TypeError) as cm:
+            from_tuples(col_names, *tuples)
+        self.assertEqual(str(cm.exception), "1-th element in 1-th tuple is suppoesed to be of type <class 'str'>, got <class 'int'>")
+
+    def test_from_tuples_empty_tuples(self):
+        col_names = ['id', 'name']
+        tuples = []
+        with self.assertRaises(AssertionError):
+            from_tuples(col_names, *tuples)
+
+    def test_from_tuples_unsupported_type(self):
+        col_names = ['id', 'name', 'cond', 'measure', 'error']
+        tuples = [
+            (1, 'bob', True, 3.14, None),
+        ]
+        with self.assertRaises(TypeError) as cm:
+            from_tuples(col_names, *tuples)
+        self.assertEqual(str(cm.exception), "in the first tuple, the 4-th element is of an unsupported type, got <class 'NoneType'>")
+
     def test_not(self):
         c = lit(True)
         self.assertEqual((~c).expr.sql.str, "NOT TRUE")

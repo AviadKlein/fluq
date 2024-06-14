@@ -4,9 +4,13 @@ from fluq._util import is_valid_json
 from fluq.expression.base import ResultSet
 from fluq.expression.function import ExistsOperatorExpression, CaseExpression, FunctionParams
 from fluq.expression.literals import *
+from fluq.expression.selectable import *
+from fluq.expression.clause import SelectClauseExpression
+from fluq.expression.query import QueryExpression
+from fluq.expression.set_operation import UnionAllSetOperation
 from fluq.column import Column
 from fluq.column import WindowSpec # not used in this module but is importat for users
-from fluq.expression.selectable import *
+
 from fluq.frame import Frame
 
 
@@ -348,3 +352,58 @@ class SQLFunctions:
 #####################################
 functions = SQLFunctions() # recommend to import as fn
 datetimeparts = DateTimePart() # recommend to import as dt
+
+
+# Frame constructors
+
+def from_tuples(col_names: List[str], *tuples: Tuple[int | float | bool | str, ...]) -> Frame:
+    """construct a frame as a SQL statement from tuples
+    very handy for unit-testing on different data
+    
+    Args:
+        col_names: List[str] - column names for the Frame
+        tuples - should keep the same 'vertical' primitive type, only supporting the union listed in the signature
+        types are inferred based on the 1st tuple
+
+    Usage:
+        >>> tuples = [
+        >>>     (1, 'bob'),
+        >>>     (2, 'joe'),
+        >>> ]
+        >>> frame = Frame.from_tuples(['id', 'name'], *tuples)
+        >>> print(frame.sql) # output: SELECT 1 AS id, 'bob' AS name UNION ALL SELECT 2 AS id, 'joe' AS name
+    
+    """
+
+    # validate sizes
+    assert len(tuples) > 0
+    tuples = list(enumerate(tuples))
+    n_col_names = len(col_names)
+    bad_tuples = []
+    for i, t in tuples:
+        if len(t) != n_col_names:
+            bad_tuples.append((i, t))
+    if len(bad_tuples) > 0:
+        raise TypeError(f"the following tuples: {[_[0] for _ in bad_tuples]} have mis-matching lengths with the number of column names")
+    
+    # infer type by first tuple
+    types = {}
+    for j, e in enumerate(tuples[0][1]):
+        if not isinstance(e, int | float | bool | str):
+            raise TypeError(f"in the first tuple, the {j}-th element is of an unsupported type, got {type(e)}")
+        types[j] = type(e)
+    
+    # validate types for rest of tuples
+    for i, t in tuples[1:]:
+        for j, e in enumerate(t):
+            if not isinstance(e, types[j]):
+                raise TypeError(f"{j}-th element in {i}-th tuple is suppoesed to be of type {types[j]}, got {type(e)}")
+    
+    # turn into expressions
+    aliases = [ValidName(cn) for cn in col_names]
+    tuples = list(map(lambda t: map(lambda e: LiteralExpression(e), t[1]), tuples))
+    queries = map(lambda lst: SelectClauseExpression(expressions=list(lst), aliases=aliases), tuples)
+    result, *tail = list(map(lambda sc: QueryExpression(select_clause=sc), queries))
+    while len(tail) > 0:
+        result = UnionAllSetOperation(left=result, right=tail.pop())
+    return Frame(queryable_expression=result, alias=None)
