@@ -224,3 +224,7 @@ class TestSql(TestCase):
         ).with_column("pct_value", fn.sum("total_value").over(WindowSpec().partition_by(col("a"))))
         self.assertEqual(query.sql.str, "SELECT *, SUM( 'total_value' ) OVER ( PARTITION BY a ) AS pct_value FROM ( SELECT a, b, SUM( value ) AS total_value FROM t1 GROUP BY a, b ORDER BY a ASC NULLS FIRST, b ASC NULLS FIRST )")
 
+    def test_expr_bug(self):
+        query = select(lit(1).cast.STRING)
+        self.assertEqual("SELECT CAST( 1 AS STRING )", query.sql.str)
+

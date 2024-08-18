@@ -531,6 +531,11 @@ class _CastColumnConstructor():
     def TIMESTAMP(self) -> Column:
         new_expr = CastExpression(self.expr, TimestampDataType())
         return Column(expression=new_expr, alias=None)
+    
+    @property
+    def STRING(self) -> Column:
+        new_expr = CastExpression(self.expr, StringDataType())
+        return Column(expression=new_expr, alias=None)
 
 
 @dataclass
